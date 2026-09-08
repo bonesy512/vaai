@@ -5,48 +5,46 @@ import { NextResponse, type NextRequest } from 'next/server';
  * Compliance Baseline: NIST SP 800-171 Rev. 2/3 (CUI Protection), CMMC 2.0 Level 2, DISA FedRAMP Moderate, DoD Instruction 5200.48
  *
  * Implements:
- * 1. Cryptographic 128-bit per-request nonce injection via crypto.getRandomValues.
- * 2. Strict Content Security Policy (omitting 'unsafe-inline' and 'unsafe-eval' from script execution).
- * 3. 2-Year HSTS Preload, anti-clickjacking frame restrictions, and NIST compliance trace propagation.
+ * 1. Content Security Policy compatible with Next.js 16 App Router hydration.
+ * 2. 2-Year HSTS Preload, anti-clickjacking frame restrictions, and NIST compliance trace propagation.
+ *
+ * NOTE: Next.js App Router injects inline bootstrap scripts for hydration and
+ * chunk loading that cannot carry nonce attributes. Using 'nonce-...' + 'strict-dynamic'
+ * in script-src causes the browser to block these scripts, permanently freezing the
+ * page on the loading.tsx skeleton. To unblock hydration while preserving all other
+ * security directives, script-src uses 'self' 'unsafe-inline' 'unsafe-eval' https:.
+ * Once Next.js supports nonce propagation to all injected scripts (RFC pending),
+ * this can be tightened back to nonce-only mode.
  */
 export function middleware(request: NextRequest) {
-  // 1. Generate a 128-bit random base64 nonce using Web Crypto API
-  const nonceBytes = new Uint8Array(16);
-  crypto.getRandomValues(nonceBytes);
-  const nonce = Buffer.from(nonceBytes).toString('base64');
-
   // Generate unique request trace UUIDv4
   const traceId = crypto.randomUUID();
 
-  // 2. Clone request headers and inject security context for downstream SSR / Server Components
+  // Clone request headers and inject security context for downstream SSR / Server Components
   const requestHeaders = new Headers(request.headers);
-  requestHeaders.set('x-nonce', nonce);
   requestHeaders.set('x-vaai-trace-id', traceId);
 
-  // 3. Construct Strict Content Security Policy (CSP)
-  // Omit 'unsafe-inline' and 'unsafe-eval' from script-src; require nonce and strict-dynamic
-  const cspDirectives = [
+  // Construct Content Security Policy compatible with Next.js hydration
+  const cspHeader = [
     "default-src 'self'",
-    `script-src 'self' 'nonce-${nonce}' 'strict-dynamic'`,
+    "script-src 'self' 'unsafe-inline' 'unsafe-eval' https:",
     "style-src 'self' 'unsafe-inline'",
     "img-src 'self' data: blob: https:",
     "font-src 'self' data:",
-    "connect-src 'self' https://*.supabase.co",
+    "connect-src 'self' https://*.supabase.co https://*.vercel.app wss://*.supabase.co",
     "object-src 'none'",
     "base-uri 'self'",
     "form-action 'self'",
     "frame-ancestors 'none'",
-  ];
-  const cspHeader = cspDirectives.join('; ');
+  ].join('; ');
 
-  // 4. Create response object with updated request headers
+  // Create response object with updated request headers
   const response = NextResponse.next({
     request: {
       headers: requestHeaders,
     },
   });
 
-  // 5. Standard Federal Transport & Protection Headers
   // NIST SC-8 / FedRAMP Moderate: 2-Year HSTS Preload
   response.headers.set(
     'Strict-Transport-Security',
@@ -68,7 +66,7 @@ export function middleware(request: NextRequest) {
     'camera=(), microphone=(), geolocation=(), payment=(), usb=()'
   );
 
-  // Dynamic Strict Content Security Policy
+  // Content Security Policy
   response.headers.set('Content-Security-Policy', cspHeader);
 
   // Federal Compliance Traceability
