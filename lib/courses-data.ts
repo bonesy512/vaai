@@ -35,22 +35,28 @@ export const INSTITUTIONAL_COURSES: Course[] = [
         'Engineer an automated multi-stage defense briefing pipeline that ingests raw tactical field reports, de-identifies PII and military EDI-PIs, enforces strict JSON schema conformance, and generates formal operational summaries with zero data-leakage boundaries.',
       rubric: [
         {
-          name: 'CUI & PII Lexical Sanitization',
-          weight: 35,
-          description:
-            'Achieves 100% precision in redacting SSNs, 10-digit DoD ID numbers (EDI-PIs), and MGRS tactical grid coordinates in compliance with DoD Instruction 5200.48.',
-        },
-        {
-          name: 'Schema Enforcement & Output Shaping',
-          weight: 35,
-          description:
-            'Extracts structured observation entities conforming strictly to the Defense Intelligence Observation Schema with automatic JSON repair.',
-        },
-        {
-          name: 'Zero-Retention WASM Runtime',
+          name: 'Schema Conformity & Determinism',
           weight: 30,
           description:
-            'Executes client-side inside Pyodide WebAssembly with zero network egress or telemetry leakage to third-party endpoints.',
+            'Zero uncaught validation exceptions across 10 noisy SITREPs. Structured payload conforms to MIL-STD-2525D and Pydantic constraints.',
+        },
+        {
+          name: 'Fallback & Error Resilience',
+          weight: 25,
+          description:
+            'Sub-250ms failover execution upon simulated HTTP 429 (rate-limit) or 503 (provider outage) transitioning seamlessly to local offline fallback.',
+        },
+        {
+          name: 'Boundary Defense & Lexical Sanitization',
+          weight: 25,
+          description:
+            '100% precision redaction of military callsigns, personnel names, 10-digit EDIPIs, SSNs, and WGS-84/MGRS coordinates before any upstream dispatch.',
+        },
+        {
+          name: 'Code Quality & Memory Budget',
+          weight: 20,
+          description:
+            'Memory allocation strictly bounded within the 4,096-token ceiling; clean modular architecture without unhandled runtime leaks.',
         },
       ],
       starterCode: `# VAAI-101 Capstone: Multi-Stage Defense Briefing Generator

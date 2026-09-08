@@ -41,6 +41,16 @@ const LESSON_REGISTRY: Record<string, LessonContentEntry> = {};
 function reg(entry: LessonContentEntry) {
   const key = `${entry.courseId}/${entry.moduleId}/${entry.lessonId}`;
   LESSON_REGISTRY[key] = entry;
+
+  // Mirror aliases for mod-X / les-X and MX / LX
+  const modNum = entry.moduleId.replace(/[^0-9]/g, '');
+  const lesNum = entry.lessonId.replace(/[^0-9]/g, '');
+  if (modNum && lesNum) {
+    LESSON_REGISTRY[`${entry.courseId}/mod-${modNum}/les-${lesNum}`] = entry;
+    LESSON_REGISTRY[`${entry.courseId}/M${modNum}/L${lesNum}`] = entry;
+    LESSON_REGISTRY[`${entry.courseId}/mod-${modNum}/L${lesNum}`] = entry;
+    LESSON_REGISTRY[`${entry.courseId}/M${modNum}/les-${lesNum}`] = entry;
+  }
 }
 
 // ===========================================================================================
@@ -87,41 +97,41 @@ VAAI operators must adhere to Title 38 U.S.C. § 5901–5905 by:
 - Refusing to process or store veteran PII beyond session scope`,
   exerciseTitle: 'Few-Shot Defense SITREP Parser',
   exerciseInstructions: 'Build a deterministic prompt template that formats unstructured field SITREPs into validated JSON action blocks with PII redaction.',
-  starterCode: `import json
-import re
+  starterCode: `import re
+from typing import Dict, Any
 
-def build_sitrep_parser(raw_sitrep: str) -> dict:
-    """
-    Parse a raw military SITREP string into a structured
-    defense briefing JSON object with PII redaction.
-    
-    Requirements:
-    1. Redact any 10-digit EDIPI numbers
-    2. Redact MGRS grid coordinates
-    3. Extract report type, priority, and key entities
-    4. Return a valid JSON-serializable dict
-    """
-    # TODO: Implement your few-shot parser
-    # Step 1: Define PII redaction regex patterns
-    edipi_pattern = r'\\b\\d{10}\\b'
-    
-    # Step 2: Sanitize the input
-    sanitized = re.sub(edipi_pattern, '[REDACTED-EDIPI]', raw_sitrep)
-    
-    # Step 3: Extract structured fields
-    result = {
-        "report_type": "SITREP",
-        "sanitized_content": sanitized,
-        "pii_redacted": True,
-        "schema_version": "1.0.0"
+SYSTEM_DIRECTIVE = """You are an automated tactical message formatter adhering to FM 6-0 staff standards.
+Convert raw field transmissions into standardized Markdown SITREPs.
+DO NOT include conversational preambles, greetings, affirmations, or postscripts.
+Emit ONLY the structured markdown block."""
+
+def clean_conversational_filler(raw_output: str) -> str:
+    filler_patterns = [
+        r"^(?:sure|understood|here is|certainly|reporting).*?:\\s*",
+        r"^(?:roger|copy that|acknowledged).*?[\\n\\r]",
+        r"\\n*(?:let me know|hope this helps|standing by).*?$"
+    ]
+    cleaned = raw_output.strip()
+    for pattern in filler_patterns:
+        cleaned = re.sub(pattern, "", cleaned, flags=re.IGNORECASE | re.MULTILINE)
+    return cleaned.strip()
+
+def build_sitrep_payload(raw_sitrep: str) -> Dict[str, Any]:
+    return {
+        "temperature": 0.0,
+        "messages": [
+            {"role": "system", "content": SYSTEM_DIRECTIVE},
+            {"role": "user", "content": f"FORMAT THIS SITREP:\\n{raw_sitrep}"}
+        ]
     }
-    
-    return result
 
-# Test with sample input
-sample = "SITREP //CUI// OPS: Marcus Vance EDIPI: 1234567890 GRID: 18SUJ23480 STATUS: GREEN"
-output = build_sitrep_parser(sample)
-print(json.dumps(output, indent=2))`,
+# Test execution
+sample = "Roger that command. Here is the report: SITREP: Patrol Bravo reports all clear. Standing by."
+cleaned = clean_conversational_filler(sample)
+payload = build_sitrep_payload(cleaned)
+print("CLEANED TRANSMISSION:", cleaned)
+print("PAYLOAD COMPILED (T=0.0):", payload["temperature"] == 0.0)
+`,
   language: 'python',
   keyTakeaways: [
     'Prompts are code artifacts under version control, not ad-hoc text',
@@ -291,68 +301,73 @@ print(json.dumps(result, indent=2))`,
 reg({
   courseId: 'VAAI-101', moduleId: 'M2', lessonId: 'L1',
   courseTitle: 'Applied AI Foundations & LLM Operations',
-  moduleTitle: 'Module 2: CUI & PII De-Identification Pipelines',
-  lessonTitle: 'Regex-Based PII Sanitization for Defense Documents',
-  lessonNumber: 1, totalLessonsInModule: 3, contactMinutes: 60,
+  moduleTitle: 'Module 2: Schema Enforcement & Pydantic Validation',
+  lessonTitle: 'MIL-STD-2525D Symbology Translation & Output Contracts',
+  lessonNumber: 1, totalLessonsInModule: 3, contactMinutes: 600,
   learningObjectives: [
-    'Construct regex patterns for SSN, EDIPI, MGRS coordinate sanitization',
-    'Implement multi-pass de-identification pipelines compliant with DoD 5200.48',
-    'Audit sanitization completeness with automated verification assertions',
+    'Enforce deterministic data contracts conforming to MIL-STD-2525D Joint Military Symbology',
+    'Define Pydantic v2 type constraints with geographic boundary validation',
+    'Implement automated self-correcting validation retry loops trapping ValidationError exceptions',
   ],
-  theoryMarkdown: `# CUI & PII De-Identification Pipelines
+  theoryMarkdown: `# MIL-STD-2525D Schema Enforcement & Output Contracts
 
-## Controlled Unclassified Information (CUI)
-Under DoD Instruction 5200.48 and NIST SP 800-171, AI systems handling defense data must sanitize:
+## Doctrinal Baseline: MIL-STD-2525D
+Tactical symbology and operational readiness reports require absolute determinism. Downstream Command and Control (C2) systems cannot process creative or hallucinated statuses.
 
-| PII Type | Regex Pattern | Example |
-|----------|---------------|---------|
-| SSN | \`\\b\\d{3}-\\d{2}-\\d{4}\\b\` | 123-45-6789 |
-| EDIPI (DoD ID) | \`\\b\\d{10}\\b\` | 1234567890 |
-| MGRS Grid | Complex pattern | 18S UJ 23480 06470 |
+### Deterministic Data Contracts
+In accordance with MIL-STD-2525D:
+- **Operational Capability**: Strictly enumerated as \`FULLY_MISSION_CAPABLE\`, \`DEGRADED\`, or \`NON_MISSION_CAPABLE\`.
+- **Geographic Coordinates**: WGS-84 latitude strictly bounded within \`[-90.0, 90.0]\` and longitude within \`[-180.0, 180.0]\`.
+- **Unit Designation**: Regex format constraint \`^[A-Z0-9\\-\\/]{2,15}$\`.
 
-## Multi-Pass Sanitization Architecture
+### Self-Correcting Feedback Loops
+When an LLM emits a malformed structure or out-of-range value, the error traceback is captured and reinjected:
 \`\`\`
-Raw Input → Pass 1: SSN Redaction → Pass 2: EDIPI Redaction → Pass 3: Grid Redaction → Sanitized Output
-\`\`\`
+Attempt 1 (Malformed) → ValidationError Captured → Diagnostic Reprompt → Attempt 2 (Conforming)
+\`\`\``,
+  exerciseTitle: 'MIL-STD-2525D Pydantic Validation & Retry Loop',
+  exerciseInstructions: 'Implement a Pydantic v2 schema for UnitStatusReport with geographic bounds, readiness scores, and an automated retry loop.',
+  starterCode: `from enum import Enum
+from typing import Optional, List
+from pydantic import BaseModel, Field, field_validator
+import re
 
-Each pass is **idempotent** — running the full pipeline multiple times produces the same result.`,
-  exerciseTitle: 'Multi-Pass PII Redaction Engine',
-  exerciseInstructions: 'Build a multi-pass PII sanitization engine that removes SSNs, EDIPIs, and MGRS grids from defense text.',
-  starterCode: `import re
+class OperationalCapability(str, Enum):
+    FULLY_MISSION_CAPABLE = "FULLY_MISSION_CAPABLE"
+    DEGRADED = "DEGRADED"
+    NON_MISSION_CAPABLE = "NON_MISSION_CAPABLE"
 
-def sanitize_defense_text(raw_text: str) -> dict:
-    """
-    Multi-pass PII sanitization engine.
-    Redacts SSNs, EDIPIs, and MGRS grid coordinates.
-    Returns sanitized text with redaction count.
-    """
-    redaction_count = 0
-    text = raw_text
-    
-    # Pass 1: SSN Redaction (XXX-XX-XXXX or XXXXXXXXX)
-    ssn_pattern = r'\\b\\d{3}-\\d{2}-\\d{4}\\b|\\b\\d{9}\\b'
-    ssn_matches = len(re.findall(ssn_pattern, text))
-    text = re.sub(ssn_pattern, '[REDACTED-SSN]', text)
-    redaction_count += ssn_matches
-    
-    # Pass 2: EDIPI Redaction (10-digit DoD ID)
-    edipi_pattern = r'\\b\\d{10}\\b'
-    edipi_matches = len(re.findall(edipi_pattern, text))
-    text = re.sub(edipi_pattern, '[REDACTED-EDIPI]', text)
-    redaction_count += edipi_matches
-    
-    # TODO: Pass 3: MGRS Grid Coordinate Redaction
-    
-    return {
-        "sanitized_text": text,
-        "redaction_count": redaction_count,
-        "is_clean": redaction_count > 0,
-        "compliance": "DoD-5200.48"
-    }
+class UnitStatusReport(BaseModel):
+    unit_designation: str = Field(..., description="Alphanumeric military unit identifier")
+    latitude: float = Field(..., ge=-90.0, le=90.0, description="WGS-84 Latitude")
+    longitude: float = Field(..., ge=-180.0, le=180.0, description="WGS-84 Longitude")
+    readiness_score: float = Field(..., ge=0.0, le=100.0, description="Readiness percentage")
+    operational_status: OperationalCapability
+    casualties_reported: int = Field(default=0, ge=0)
 
-sample = "Agent SSN: 123-45-6789, EDIPI: 1234567890, GRID: 18S UJ 23480 06470"
-result = sanitize_defense_text(sample)
-print(result)`,
+    @field_validator("unit_designation")
+    @classmethod
+    def validate_unit_format(cls, v: str) -> str:
+        if not re.match(r"^[A-Z0-9\\-\\/]{2,15}$", v):
+            raise ValueError("Unit designation must be 2-15 alphanumeric chars (hyphens/slashes allowed)")
+        return v
+
+def execute_validation_retry_loop(inference_client, prompt: str, max_retries: int = 3) -> UnitStatusReport:
+    current_prompt = prompt
+    for attempt in range(max_retries):
+        raw_response = inference_client.generate(current_prompt)
+        try:
+            return UnitStatusReport.model_validate_json(raw_response)
+        except Exception as err:
+            if attempt == max_retries - 1:
+                raise err
+            current_prompt += f"\\n\\nERROR IN PREVIOUS ATTEMPT:\\n{str(err)}\\nEmit ONLY valid JSON fixing this error."
+
+# Test validation
+mock_valid_json = '{"unit_designation": "VIPER-1", "latitude": 34.05, "longitude": -118.25, "readiness_score": 95.0, "operational_status": "FULLY_MISSION_CAPABLE", "casualties_reported": 0}'
+report = UnitStatusReport.model_validate_json(mock_valid_json)
+print("VALIDATED REPORT:", report.unit_designation, report.operational_status)
+`,
   language: 'python',
   keyTakeaways: [
     'PII sanitization must be multi-pass and idempotent',
@@ -538,58 +553,88 @@ print(f"Chain valid: {chain.verify_chain()}")`,
 reg({
   courseId: 'VAAI-101', moduleId: 'M3', lessonId: 'L1',
   courseTitle: 'Applied AI Foundations & LLM Operations',
-  moduleTitle: 'Module 3: Multi-Provider API Orchestration',
-  lessonTitle: 'Cross-Provider API Gateway Design',
-  lessonNumber: 1, totalLessonsInModule: 2, contactMinutes: 90,
+  moduleTitle: 'Module 3: Tokenomics & Context Window Budgets',
+  lessonTitle: 'Tactical Edge Context Trimmer & Token-Bucket Rate Limiter',
+  lessonNumber: 1, totalLessonsInModule: 2, contactMinutes: 600,
   learningObjectives: [
-    'Design fault-tolerant multi-provider API gateways (OpenAI, Anthropic, Google)',
-    'Implement automatic failover with latency-aware model routing',
-    'Build cost-optimized model selection based on task complexity',
+    'Operate within DIL (Disconnected, Intermittent, Limited) tactical edge network constraints',
+    'Implement sliding-window memory buffers with Byte-Pair Encoding (BPE) context trimming',
+    'Design token-bucket rate limiters smoothing burst transmissions against HTTP 429 errors',
   ],
-  theoryMarkdown: `# Multi-Provider API Orchestration
+  theoryMarkdown: `# Tactical Edge Context Trimming & Tokenomics
 
-## Defense-Grade API Gateway
-Production defense AI systems must never depend on a single LLM provider. A multi-provider gateway enables:
-- **Failover resilience**: If OpenAI is down, route to Anthropic or Google
-- **Cost optimization**: Route simple tasks to cheaper models
-- **Latency budgeting**: Use the fastest available model for real-time tactical systems
+## Doctrinal Baseline: CJCSM 6510.01B
+Forward tactical operations function across Disconnected, Intermittent, and Limited (DIL) links where bandwidth is precious and latency is mission-critical.
 
-## Gateway Architecture
-\`\`\`
-Client Request → API Gateway → Provider Selection Engine
-                                    ├── OpenAI GPT-4o (Primary)
-                                    ├── Anthropic Claude 3.5 (Failover)
-                                    └── Google Gemini 1.5 (Cost-optimized)
-\`\`\``,
-  exerciseTitle: 'Multi-Provider Gateway Simulator',
-  exerciseInstructions: 'Implement a provider selection engine that routes requests based on availability and cost.',
-  starterCode: `class ProviderGateway:
-    def __init__(self):
-        self.providers = {
-            "openai": {"available": True, "cost_per_1k": 0.03, "latency_ms": 200},
-            "anthropic": {"available": True, "cost_per_1k": 0.015, "latency_ms": 350},
-            "google": {"available": True, "cost_per_1k": 0.00125, "latency_ms": 150},
-        }
-    
-    def select_provider(self, priority: str = "cost") -> str:
-        available = {k: v for k, v in self.providers.items() if v["available"]}
-        if not available:
-            raise RuntimeError("ALL_PROVIDERS_UNAVAILABLE")
-        
-        if priority == "cost":
-            return min(available, key=lambda k: available[k]["cost_per_1k"])
-        elif priority == "latency":
-            return min(available, key=lambda k: available[k]["latency_ms"])
-        return list(available.keys())[0]
+### Context Budgeting & Token Limits
+- **Maximum Context Ceiling**: Fixed at 4,096 tokens to bound serialization time and memory usage.
+- **System Instruction Priority**: The system prompt / commander's operational intent is immutable and must NEVER be pruned during sliding-window trimming.
+- **Token-Bucket Throttling**: Regulates client inference request bursts using smooth bucket replenishment.`,
+  exerciseTitle: 'Tactical Context Trimmer & Token Bucket',
+  exerciseInstructions: 'Implement TacticalContextManager bounding history within 4,096 tokens and TokenBucketRateLimiter protecting against traffic bursts.',
+  starterCode: `import time
+import tiktoken
+from typing import List, Dict
 
-gw = ProviderGateway()
-print(f"Cost-optimized: {gw.select_provider('cost')}")
-print(f"Latency-optimized: {gw.select_provider('latency')}")`,
+class TacticalContextManager:
+    def __init__(self, max_token_ceiling: int = 4096, model_encoding: str = "cl100k_base"):
+        self.max_ceiling = max_token_ceiling
+        self.encoder = tiktoken.get_encoding(model_encoding)
+
+    def count_tokens(self, text: str) -> int:
+        return len(self.encoder.encode(text))
+
+    def trim_context_window(self, messages: List[Dict[str, str]]) -> List[Dict[str, str]]:
+        if not messages:
+            return []
+        system_msg = messages[0] if messages[0]["role"] == "system" else None
+        history = messages[1:] if system_msg else messages[:]
+        system_tokens = self.count_tokens(system_msg["content"]) if system_msg else 0
+        available_budget = self.max_ceiling - system_tokens - 128
+        trimmed_history: List[Dict[str, str]] = []
+        current_tokens = 0
+        for msg in reversed(history):
+            msg_tokens = self.count_tokens(msg["content"])
+            if current_tokens + msg_tokens <= available_budget:
+                trimmed_history.insert(0, msg)
+                current_tokens += msg_tokens
+            else:
+                break
+        return [system_msg] + trimmed_history if system_msg else trimmed_history
+
+class TokenBucketRateLimiter:
+    def __init__(self, capacity: int, refill_rate_per_sec: float):
+        self.capacity = capacity
+        self.refill_rate = refill_rate_per_sec
+        self.tokens = capacity
+        self.last_refill = time.time()
+
+    def consume(self, tokens_requested: int) -> bool:
+        now = time.time()
+        elapsed = now - self.last_refill
+        self.tokens = min(self.capacity, self.tokens + elapsed * self.refill_rate)
+        self.last_refill = now
+        if self.tokens >= tokens_requested:
+            self.tokens -= tokens_requested
+            return True
+        return False
+
+# Test context trimmer
+mgr = TacticalContextManager(max_token_ceiling=200)
+msgs = [
+    {"role": "system", "content": "You are a tactical assistant."},
+    {"role": "user", "content": "Transmit SITREP 1..."},
+    {"role": "assistant", "content": "SITREP 1 acknowledged."},
+    {"role": "user", "content": "Transmit SITREP 2..."}
+]
+trimmed = mgr.trim_context_window(msgs)
+print(f"Preserved messages: {len(trimmed)}")
+`,
   language: 'python',
   keyTakeaways: [
-    'Never depend on a single LLM provider in production defense systems',
-    'Cost and latency are first-class routing parameters',
-    'Failover mechanisms must be tested under simulated provider outages',
+    'System instructions must always be preserved during sliding-window context trimming',
+    'Context ceilings bound execution memory and network transmission latency',
+    'Token bucket algorithms prevent HTTP 429 quota failures during traffic bursts',
   ],
   previousLesson: { courseId: 'VAAI-101', moduleId: 'M2', lessonId: 'L3' },
   nextLesson: { courseId: 'VAAI-101', moduleId: 'M4', lessonId: 'L1' },
@@ -598,92 +643,163 @@ print(f"Latency-optimized: {gw.select_provider('latency')}")`,
 reg({
   courseId: 'VAAI-101', moduleId: 'M4', lessonId: 'L1',
   courseTitle: 'Applied AI Foundations & LLM Operations',
+  moduleTitle: 'Module 4: Secure API Architecture & Fallback Circuits',
+  lessonTitle: 'Asynchronous Fallback Circuit Breaker & Sub-250ms Failover',
+  lessonNumber: 1, totalLessonsInModule: 2, contactMinutes: 600,
+  learningObjectives: [
+    'Enforce NIST SP 800-171 Rev. 3 SC-7 boundary defense and SC-13 zero-data-retention',
+    'Architect PACE fallback circuit breakers transitioning between CLOSED, OPEN, and HALF_OPEN',
+    'Guarantee sub-250ms deterministic failover to local offline runtime upon cloud provider faults',
+  ],
+  theoryMarkdown: `# Secure API Architecture & Fallback Circuits
+
+## Doctrinal Baseline: NIST SP 800-171 Rev. 3 (SC-7 / SC-13)
+Direct unmonitored connections to commercial LLM APIs violate defense boundary standards. All traffic must pass through a boundary defense layer with:
+- **Zero Data Retention (ZDR)**: Guarantees prompt payloads are not saved in server logs or used for training.
+- **PACE Fallback Circuits**: Transitions within <= 250ms to local verified runtimes upon cloud 429/503 faults.`,
+  exerciseTitle: 'Asynchronous Fallback Circuit Breaker',
+  exerciseInstructions: 'Implement TacticalCircuitBreaker with sub-250ms local failover when primary cloud requests time out or fail.',
+  starterCode: `import asyncio
+import time
+from typing import Optional
+
+class CircuitState:
+    CLOSED = "CLOSED"
+    OPEN = "OPEN"
+    HALF_OPEN = "HALF_OPEN"
+
+class TacticalCircuitBreaker:
+    def __init__(self, failure_threshold: int = 3, recovery_timeout: float = 10.0):
+        self.failure_threshold = failure_threshold
+        self.recovery_timeout = recovery_timeout
+        self.failure_count = 0
+        self.state = CircuitState.CLOSED
+        self.last_failure_time = 0.0
+
+    async def execute_request(self, primary_coro, fallback_coro):
+        start_time = time.perf_counter()
+        if self.state == CircuitState.OPEN:
+            if time.perf_counter() - self.last_failure_time > self.recovery_timeout:
+                self.state = CircuitState.HALF_OPEN
+            else:
+                result = await fallback_coro()
+                elapsed = (time.perf_counter() - start_time) * 1000
+                return result, f"FAILOVER_LOCAL (Latency: {elapsed:.2f}ms)"
+
+        try:
+            result = await primary_coro()
+            if self.state == CircuitState.HALF_OPEN:
+                self.state = CircuitState.CLOSED
+                self.failure_count = 0
+            elapsed = (time.perf_counter() - start_time) * 1000
+            return result, f"PRIMARY_SUCCESS (Latency: {elapsed:.2f}ms)"
+        except (asyncio.TimeoutError, ConnectionError):
+            self.failure_count += 1
+            self.last_failure_time = time.perf_counter()
+            if self.failure_count >= self.failure_threshold:
+                self.state = CircuitState.OPEN
+            result = await fallback_coro()
+            elapsed = (time.perf_counter() - start_time) * 1000
+            assert elapsed <= 250.0, f"Breach of latency constraint: {elapsed}ms > 250ms"
+            return result, f"CIRCUIT_TRIPPED_FALLBACK (Latency: {elapsed:.2f}ms)"
+
+# Test circuit breaker
+async def mock_primary():
+    raise ConnectionError("Simulated Cloud 503 Outage")
+
+async def mock_fallback():
+    return {"status": "SANITIZED_LOCAL", "cui_redacted": True}
+
+async def run_test():
+    cb = TacticalCircuitBreaker()
+    res, log = await cb.execute_request(mock_primary, mock_fallback)
+    print(f"Outcome: {log}")
+    print(f"Result: {res}")
+
+asyncio.run(run_test())
+`,
+  language: 'python',
+  keyTakeaways: [
+    'Circuit breakers prevent cascaded system freeze during cloud provider outages',
+    'Tactical SLAs mandate sub-250ms failover to local deterministic engines',
+    'NIST SP 800-171 SC-7 requires strict boundary protection on all external API requests',
+  ],
+  previousLesson: { courseId: 'VAAI-101', moduleId: 'M3', lessonId: 'L1' },
+  nextLesson: { courseId: 'VAAI-101', moduleId: 'M4', lessonId: 'L2' },
+});
+
+reg({
+  courseId: 'VAAI-101', moduleId: 'M4', lessonId: 'L2',
+  courseTitle: 'Applied AI Foundations & LLM Operations',
   moduleTitle: 'Module 4: Capstone — Defense Briefing Generator',
   lessonTitle: 'Capstone Project: Multi-Stage Defense Briefing Pipeline',
-  lessonNumber: 1, totalLessonsInModule: 1, contactMinutes: 120,
+  lessonNumber: 2, totalLessonsInModule: 2, contactMinutes: 600,
   learningObjectives: [
     'Integrate PII sanitization, schema enforcement, and zero-retention into a single pipeline',
     'Demonstrate end-to-end defense briefing generation from raw tactical reports',
-    'Pass automated rubric evaluation with ≥ 80% score across all criteria',
+    'Pass automated rubric evaluation with >= 80% score across all 4 criteria',
   ],
   theoryMarkdown: `# Capstone: Multi-Stage Defense Briefing Generator
 
 ## Mission Briefing
-You will build an end-to-end pipeline that:
-1. Ingests raw tactical field reports
-2. Sanitizes PII (SSN, EDIPI, MGRS)
-3. Enforces strict JSON schema conformance
-4. Generates formal operational summaries
-5. Verifies zero data-leakage boundaries
+You will engineer an automated end-to-end defense briefing pipeline that:
+1. Ingests raw tactical field reports across 10 noisy SITREPs.
+2. Sanitizes PII (SSN, EDIPI, MGRS, calls, and personnel names) compliant with DoD 5200.48.
+3. Enforces strict JSON schema conformance with automatic exception recovery.
+4. Executes fallback circuit within <= 250ms during simulated HTTP 429/503 provider faults.
+5. Verifies memory boundedness within the 4,096-token context window budget.
 
-## Rubric (100 Points)
-| Criterion | Weight | Description |
-|-----------|--------|-------------|
-| CUI & PII Sanitization | 35% | 100% precision redacting SSNs, EDIPIs, MGRS |
-| Schema Enforcement | 35% | Strict JSON schema conformance with auto-repair |
-| Zero-Retention WASM Runtime | 30% | Client-side execution with zero network egress |
-
-## Submission Requirements
-Your pipeline must process the provided test corpus and produce validated output.`,
-  exerciseTitle: 'VAAI-101 Final Capstone',
-  exerciseInstructions: 'Build the complete Multi-Stage Defense Briefing Generator pipeline. Your code will be evaluated against the automated rubric.',
-  starterCode: `import json
+## Automated Rubric (100 Points Total, >= 80% Passing Floor)
+| Dimension | Weight | Criteria |
+|-----------|--------|----------|
+| Schema Conformity & Determinism | 30% | Zero uncaught validation errors across 10 SITREPs |
+| Fallback & Error Resilience | 25% | Sub-250ms failover response on simulated HTTP 429/503 |
+| Boundary Defense & Sanitization | 25% | 100% lexical redaction of SSNs, EDIPIs, MGRS, names |
+| Code Quality & Memory Budget | 20% | Execution bounded within 4,096 tokens, no memory leaks |`,
+  exerciseTitle: 'VAAI-101 Final Capstone Defense',
+  exerciseInstructions: 'Build the complete Multi-Stage Defense Briefing Generator pipeline. Your code will be evaluated against the 4-dimension automated rubric.',
+  starterCode: `# VAAI-101 Capstone: Multi-Stage Defense Briefing Generator
+import json
 import re
-import hashlib
+import time
 
 def process_defense_briefing(raw_report: str) -> dict:
     """
-    VAAI-101 Capstone: End-to-end defense briefing pipeline.
-    
-    Pipeline stages:
-    1. Multi-pass PII sanitization
-    2. Entity extraction
-    3. Schema validation
-    4. Audit trail generation
-    5. Zero-retention verification
+    Enforces deterministic output shaping, CUI sanitization,
+    and schema validation over tactical field reports.
     """
-    # Stage 1: PII Sanitization
+    # 1. Regex sanitization patterns for military defense identifiers
     ssn_regex = r'\\b\\d{3}-\\d{2}-\\d{4}\\b|\\b\\d{9}\\b'
     edipi_regex = r'\\b\\d{10}\\b'
-    
+    mgrs_regex = r'\\b(?:[1-5]?[0-9]|60)\\s*[C-HJ-NP-X]\\s*[A-HJ-NP-Z]{2}\\s*(?:\\d{5}\\s*\\d{5}|\\d{8}|\\d{10})\\b'
+
     sanitized = re.sub(ssn_regex, '[REDACTED-SSN]', raw_report)
     sanitized = re.sub(edipi_regex, '[REDACTED-EDIPI]', sanitized)
-    
-    # Stage 2: Entity extraction (TODO: implement)
-    entities = []
-    
-    # Stage 3: Schema validation
-    briefing = {
-        "briefing_id": "DB-2026-CAPSTONE",
+    sanitized = re.sub(mgrs_regex, '[REDACTED-MGRS]', sanitized)
+
+    has_cui = bool(re.search(r'(?i)CUI|FEDCON|UNCLASSIFIED', raw_report))
+
+    return {
+        "briefing_id": "DB-2026-ALPHA",
         "status": "SANITIZED",
-        "entities": entities,
+        "cui_detected": has_cui,
         "sanitized_payload": sanitized,
-        "zero_retention_verified": True,
-        "schema_version": "1.0.0"
+        "schema_version": "1.0.0",
+        "zero_retention_verified": True
     }
-    
-    # Stage 4: Audit trail
-    audit_hash = hashlib.sha256(json.dumps(briefing, sort_keys=True).encode()).hexdigest()
-    briefing["audit_signature"] = f"sha256:{audit_hash}"
-    
-    return briefing
 
 # Test execution
-sample = """SITREP //CUI// 
-OPERATOR: Marcus Vance EDIPI: 1234567890 SSN: 123-45-6789
-GRID: 18S UJ 23480 06470 STATUS: DEFENSIVE
-THREAT LEVEL: HIGH
-CASUALTIES: 0 EQUIPMENT: NOMINAL"""
-
+sample = "SITREP //CUI// OPERATOR: Marcus Vance EDIPI: 1234567890 GRID: 18S UJ 23480 06470 STATUS: DEFENSIVE"
 result = process_defense_briefing(sample)
-print(json.dumps(result, indent=2))`,
+print(json.dumps(result, indent=2))
+`,
   language: 'python',
   keyTakeaways: [
     'Integration capstones validate all module competencies in a single deliverable',
-    'Defense AI pipelines must chain sanitization → validation → audit atomically',
+    'Defense AI pipelines must chain sanitization -> validation -> audit atomically',
     'Rubric-graded assessments ensure verifiable competency for WIOA credential issuance',
   ],
-  previousLesson: { courseId: 'VAAI-101', moduleId: 'M3', lessonId: 'L1' },
+  previousLesson: { courseId: 'VAAI-101', moduleId: 'M4', lessonId: 'L1' },
 });
 
 // ===========================================================================================
@@ -871,15 +987,26 @@ for (const stub of STUB_COURSES) {
 // Public API
 // ---------------------------------------------------------------------------
 
-/**
- * Retrieve a lesson by courseId, moduleId, and lessonId.
- */
 export function getLessonContent(
   courseId: string,
   moduleId: string,
   lessonId: string
 ): LessonContentEntry | null {
-  return LESSON_REGISTRY[`${courseId}/${moduleId}/${lessonId}`] || null;
+  const direct = LESSON_REGISTRY[`${courseId}/${moduleId}/${lessonId}`];
+  if (direct) return direct;
+
+  const modNum = moduleId.replace(/[^0-9]/g, '');
+  const lesNum = lessonId.replace(/[^0-9]/g, '');
+  if (modNum && lesNum) {
+    return (
+      LESSON_REGISTRY[`${courseId}/mod-${modNum}/les-${lesNum}`] ||
+      LESSON_REGISTRY[`${courseId}/M${modNum}/L${lesNum}`] ||
+      LESSON_REGISTRY[`${courseId}/mod-${modNum}/L${lesNum}`] ||
+      LESSON_REGISTRY[`${courseId}/M${modNum}/les-${lesNum}`] ||
+      null
+    );
+  }
+  return null;
 }
 
 /**
