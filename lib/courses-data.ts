@@ -232,58 +232,132 @@ def parse_and_repair_json(raw: str) -> dict:
     description:
       'Operational AI Pipeline Engineering. Deconstruct complex multi-tier defense workflows using ReAct, plan-and-solve paradigms, sandboxed tool-calling, persistent entity memory graphs, and human-in-the-loop (HITL) approval gates.',
     capstone: {
-      title: 'Defense Intelligence OSINT Triaging Agent',
+      title: 'Multi-Agent Reconnaissance & Strike Planning Pipeline (WASM Test Harness)',
       briefing:
-        'Construct an autonomous multi-agent state graph that coordinates OSINT report ingestion, geospatial cross-referencing, confidence calibration, automated human verification gating, and RFC 5424 audit logging.',
+        'Engineer an autonomous multi-agent reconnaissance and strike coordination pipeline adhering to Joint Publication JP 3-0, NIST SP 800-218 SSDF, FM 3-0, and DoD Directive 3000.09. The pipeline integrates a deterministic finite-state coordinator, Pydantic-typed tool dispatchers with strict RBAC, multi-agent adversarial debate consensus, and a fail-closed human-in-the-loop (HITL) interception gateway for kinetic action authorization.',
       rubric: [
         {
-          name: 'Multi-Agent Graph Determinism',
-          weight: 40,
+          name: 'Finite-State Determinism & Acyclic Coordination',
+          weight: 30,
           description:
-            'Agent state machine handles cyclical multi-source refinement and terminates with zero infinite loop conditions.',
+            'State machine strictly enforces acyclic execution without infinite loops; maximum step ceiling respected with zero unhandled state exceptions across 10 benchmark test missions (JP 3-0).',
         },
         {
-          name: 'Tool-Calling & Function Validation',
-          weight: 35,
-          description:
-            'Correctly invokes external lookup tools with validated argument types and automated error recovery.',
-        },
-        {
-          name: 'Human-in-the-Loop Gating & RFC 5424 Logging',
+          name: 'Tool-Calling Guardrails & RPC Authorization',
           weight: 25,
           description:
-            'Enforces mandatory approval gates on critical operational orders and emits compliant RFC 5424 audit records.',
+            '100% of tool invocations validated through typed Pydantic schemas; unauthorized role dispatches and malformed parameters rejected with zero leaks (NIST SP 800-218).',
+        },
+        {
+          name: 'Human-in-the-Loop Oversight & Kinetic Interception',
+          weight: 25,
+          description:
+            'Every restricted/kinetic action trips the DoDD 3000.09 interceptor gateway; actions remain suspended in secure state until human approval token verification.',
+        },
+        {
+          name: 'Execution Efficiency & Benchmarks',
+          weight: 20,
+          description:
+            'Multi-agent coordination completes within <= 5,000ms total execution budget; memory footprint strictly bounded within Pyodide WASM sandbox limits (FM 3-0).',
         },
       ],
-      starterCode: `# VAAI-201 Capstone: Defense OSINT Triaging Agent Graph
-from typing import Dict, Any, List
+      starterCode: `# VAAI-201 Capstone: Multi-Agent Reconnaissance & Strike Planning Pipeline
+# Compliance: JP 3-0, NIST SP 800-218 SSDF, DoDD 3000.09, FM 3-0 Operations
+from enum import Enum
+from dataclasses import dataclass, field
+from typing import Dict, Any, List, Optional, Callable
+from pydantic import BaseModel, Field, ValidationError
+import uuid
+import time
 
-class OSINTAgentState:
-    def __init__(self, raw_report: str):
-        self.raw_report = raw_report
-        self.entities: List[str] = []
-        self.confidence_score: float = 0.0
-        self.requires_human_review: bool = False
-        self.verified: bool = False
+class MissionPhase(str, Enum):
+    INIT = "INIT"
+    INGEST = "INGEST"
+    VALIDATE = "VALIDATE"
+    SYNTHESIZE = "SYNTHESIZE"
+    AWAITING_APPROVAL = "AWAITING_APPROVAL"
+    TERMINATED = "TERMINATED"
+    FAILED = "FAILED"
 
-def osint_parser_node(state: OSINTAgentState) -> OSINTAgentState:
-    words = state.raw_report.split()
-    state.entities = [w for w in words if w.isupper() and len(w) > 3]
-    return state
+@dataclass
+class MissionState:
+    mission_id: str
+    phase: MissionPhase = MissionPhase.INIT
+    step_count: int = 0
+    max_steps: int = 15
+    transition_history: List[str] = field(default_factory=list)
+    intel_data: Dict[str, Any] = field(default_factory=dict)
+    pending_tokens: List[str] = field(default_factory=list)
+    errors: List[str] = field(default_factory=list)
 
-def confidence_evaluator_node(state: OSINTAgentState) -> OSINTAgentState:
-    if len(state.entities) >= 2:
-        state.confidence_score = 0.94
-        state.verified = True
-    else:
-        state.confidence_score = 0.58
-        state.requires_human_review = True
-    return state
+    def transition_to(self, new_phase: MissionPhase):
+        self.step_count += 1
+        if self.step_count > self.max_steps:
+            self.phase = MissionPhase.FAILED
+            self.errors.append("Max step ceiling exceeded.")
+            return
+        self.transition_history.append(f"{self.phase.value} -> {new_phase.value}")
+        self.phase = new_phase
 
-state = OSINTAgentState("RADAR EMISSION SECTOR BRAVO CONFIRMED BY AIR TRACK")
-state = osint_parser_node(state)
-state = confidence_evaluator_node(state)
-print(f"Entities: {state.entities} | Confidence: {state.confidence_score} | Review: {state.requires_human_review}")
+class RadarQueryArgs(BaseModel):
+    grid: str = Field(..., pattern=r"^\\d{1,2}[A-Z]{3}\\d{4,10}$")
+    threat_threshold: float = Field(default=0.5, ge=0.0, le=1.0)
+
+class HardenedToolDispatcher:
+    def __init__(self):
+        self._allowed_roles = {"RECON_ANALYST", "OFFICER"}
+        self._registry: Dict[str, Dict[str, Any]] = {}
+
+    def register_tool(self, name: str, schema: type[BaseModel], handler: Callable, required_role: str):
+        self._registry[name] = {"schema": schema, "handler": handler, "required_role": required_role}
+
+    def dispatch(self, tool_name: str, payload: Dict[str, Any], role: str) -> Dict[str, Any]:
+        if role not in self._allowed_roles:
+            return {"status": "DENIED", "error": f"Role '{role}' unauthorized for tool execution."}
+        if tool_name not in self._registry:
+            return {"status": "DENIED", "error": f"Unknown tool '{tool_name}'"}
+        tool = self._registry[tool_name]
+        try:
+            validated = tool["schema"].model_validate(payload)
+            return {"status": "SUCCESS", "telemetry": tool["handler"](validated)}
+        except ValidationError as e:
+            return {"status": "VALIDATION_FAILED", "error": str(e)}
+
+class HITLInterceptionGateway:
+    RESTRICTED_ACTIONS = {"KINETIC_AUTHORIZATION", "TARGET_ENGAGEMENT", "RESTRICTED_DB_WRITE"}
+
+    def __init__(self):
+        self.pending_interceptions: Dict[str, Dict[str, Any]] = {}
+
+    def intercept(self, action_type: str, state: MissionState) -> bool:
+        if action_type in self.RESTRICTED_ACTIONS:
+            token = f"TOKEN-{uuid.uuid4().hex[:6].upper()}"
+            state.transition_to(MissionPhase.AWAITING_APPROVAL)
+            state.pending_tokens.append(token)
+            return True
+        return False
+
+# Execution pipeline benchmark
+start_t = time.perf_counter()
+state = MissionState(mission_id="TASK-FORCE-RAVEN-01")
+dispatcher = HardenedToolDispatcher()
+gateway = HITLInterceptionGateway()
+
+def mock_radar(args: RadarQueryArgs):
+    return {"grid": args.grid, "threat": "CONFIRMED", "confidence": 0.96}
+
+dispatcher.register_tool("query_radar_telemetry", RadarQueryArgs, mock_radar, "RECON_ANALYST")
+
+# Step 1: Ingest & dispatch
+intel = dispatcher.dispatch("query_radar_telemetry", {"grid": "38SMB1928382910"}, "RECON_ANALYST")
+if intel["status"] == "SUCCESS":
+    state.intel_data = intel["telemetry"]
+    state.transition_to(MissionPhase.VALIDATE)
+
+# Step 2: Intercept kinetic strike proposal
+if gateway.intercept("KINETIC_AUTHORIZATION", state):
+    elapsed_ms = (time.perf_counter() - start_t) * 1000
+    print(f"Mission {state.mission_id} suspended in {state.phase.value} ({elapsed_ms:.2f}ms). Token: {state.pending_tokens[0]}")
 `,
       language: 'python',
     },
@@ -291,24 +365,65 @@ print(f"Entities: {state.entities} | Confidence: {state.confidence_score} | Revi
       {
         id: 'mod-201-1',
         moduleNumber: 1,
-        title: 'Module 1: ReAct & Plan-and-Solve Paradigms: Task Decomposition',
-        contactHours: 11,
+        title: 'Module 1: Finite-State Machine Determinism & Acyclic Workflows (JP 3-0)',
+        contactHours: 11.25,
         learningObjectives: [
-          'Deconstruct complex multi-tier defense operational tasks into tool calls',
-          'Implement Reasoning + Acting (ReAct) iterative execution loops',
-          'Handle partial tool failure recovery without pipeline halts',
+          'Deconstruct operational missions into discrete, deterministic finite states',
+          'Implement acyclic execution graphs with rigid step ceilings to avoid infinite recursion',
+          'Align agent workflows with Joint Publication JP 3-0 Phased Operations doctrine',
         ],
         exercises: [
           {
             id: 'ex-201-1-1',
-            title: 'ReAct Task Decomposer',
+            title: 'Deterministic Mission Coordinator',
             instructions:
-              'Parse an LLM response and extract the chosen action name and argument payload.',
-            starterCode: `def extract_action(text: str) -> dict:
-    if "Action:" in text:
-        action = text.split("Action:")[1].split("\\n")[0].strip()
-        return {"has_action": True, "action": action}
-    return {"has_action": False, "action": None}
+              'Implement a deterministic state coordinator enforcing linear phased transitions and maximum step execution ceilings.',
+            starterCode: `from enum import Enum
+from dataclasses import dataclass, field
+from typing import Dict, Any, List
+
+class MissionPhase(str, Enum):
+    INGEST = "INGEST"
+    VALIDATE = "VALIDATE"
+    SYNTHESIZE = "SYNTHESIZE"
+    TERMINATED = "TERMINATED"
+    FAILED = "FAILED"
+
+@dataclass
+class AgentMissionState:
+    mission_id: str
+    current_phase: MissionPhase = MissionPhase.INGEST
+    intel_items: List[Dict[str, Any]] = field(default_factory=list)
+    errors: List[str] = field(default_factory=list)
+    step_count: int = 0
+    max_steps: int = 10
+
+class DeterministicMissionCoordinator:
+    def __init__(self, max_steps: int = 10):
+        self.max_steps = max_steps
+
+    def transition(self, state: AgentMissionState, action_result: Dict[str, Any]) -> AgentMissionState:
+        state.step_count += 1
+        if state.step_count > self.max_steps:
+            state.current_phase = MissionPhase.FAILED
+            state.errors.append("Max step ceiling exceeded.")
+            return state
+
+        if state.current_phase == MissionPhase.INGEST:
+            if action_result.get("intel_valid"):
+                state.intel_items.append(action_result["data"])
+                state.current_phase = MissionPhase.VALIDATE
+            else:
+                state.current_phase = MissionPhase.FAILED
+        elif state.current_phase == MissionPhase.VALIDATE:
+            if action_result.get("classification_verified"):
+                state.current_phase = MissionPhase.SYNTHESIZE
+            else:
+                state.current_phase = MissionPhase.FAILED
+        elif state.current_phase == MissionPhase.SYNTHESIZE:
+            state.current_phase = MissionPhase.TERMINATED
+
+        return state
 `,
             language: 'python',
           },
@@ -317,23 +432,51 @@ print(f"Entities: {state.entities} | Confidence: {state.confidence_score} | Revi
       {
         id: 'mod-201-2',
         moduleNumber: 2,
-        title: 'Module 2: Tool Use & Function Calling Primitives: External Sandboxes',
-        contactHours: 11,
+        title: 'Module 2: Sandboxed Tool-Calling & RPC Schema Guardrails (NIST SP 800-218)',
+        contactHours: 11.25,
         learningObjectives: [
-          'Declare OpenAPI-compliant JSON schemas for tool calling',
-          'Integrate external lookup APIs, calculators, and sandboxed runtimes',
-          'Verify argument types before execution to prevent shell injection',
+          'Declare strongly typed Pydantic models for every external tool parameter',
+          'Implement pre-execution Role-Based Access Control (RBAC) gates in accordance with NIST SSDF',
+          'Isolate external execution contexts to prevent code injection and unauthorized sub-process execution',
         ],
         exercises: [
           {
             id: 'ex-201-2-1',
-            title: 'Tool Parameter Validator',
+            title: 'Hardened Tool Dispatcher',
             instructions:
-              'Validate that tool call parameters match the expected schema types.',
-            starterCode: `def validate_tool_args(tool_name: str, args: dict) -> bool:
-    if tool_name == "calculate_distance":
-        return isinstance(args.get("lat"), (int, float)) and isinstance(args.get("lon"), (int, float))
-    return True
+              'Enforce strict Pydantic argument validation and caller-role verification on all agent tool executions.',
+            starterCode: `from typing import Callable, Dict, Any
+from pydantic import BaseModel, Field, ValidationError
+
+class CoordinateLookupArgs(BaseModel):
+    mgrs_grid: str = Field(..., pattern=r"^\\d{1,2}[A-Z]{3}\\d{4,10}$")
+    elevation_required: bool = Field(default=False)
+
+class HardenedToolDispatcher:
+    def __init__(self):
+        self._registry: Dict[str, Dict[str, Any]] = {}
+
+    def register_tool(self, name: str, schema: type[BaseModel], handler: Callable, required_role: str):
+        self._registry[name] = {
+            "schema": schema,
+            "handler": handler,
+            "required_role": required_role
+        }
+
+    def dispatch(self, tool_name: str, raw_args: Dict[str, Any], caller_role: str) -> Dict[str, Any]:
+        if tool_name not in self._registry:
+            return {"status": "ERROR", "error": f"Tool '{tool_name}' is not registered."}
+        
+        tool = self._registry[tool_name]
+        if caller_role != tool["required_role"] and caller_role != "OFFICER":
+            return {"status": "DENIED", "error": f"Role '{caller_role}' lacks permission for '{tool_name}'."}
+
+        try:
+            validated_args = tool["schema"].model_validate(raw_args)
+            result = tool["handler"](validated_args)
+            return {"status": "SUCCESS", "data": result}
+        except ValidationError as err:
+            return {"status": "VALIDATION_FAILED", "error": err.errors()}
 `,
             language: 'python',
           },
@@ -342,23 +485,41 @@ print(f"Entities: {state.entities} | Confidence: {state.confidence_score} | Revi
       {
         id: 'mod-201-3',
         moduleNumber: 3,
-        title: 'Module 3: State Management & Memory: Working Context vs. Entity Graphs',
-        contactHours: 11,
+        title: 'Module 3: Multi-Agent Consensus & Adversarial Debate Networks (FM 3-0)',
+        contactHours: 11.25,
         learningObjectives: [
-          'Differentiate ephemeral working scratchpads from persistent entity graphs',
-          'Implement vector recall buffers for previous intelligence reports',
-          'Prune conversational history within strict token window budgets',
+          'Design asymmetric Red Team vs. Blue Team multi-agent debate topologies',
+          'Implement quorum and supermajority consensus voting mechanisms (>= 67%)',
+          'Mitigate confirmation cascades and sycophancy in distributed agent intelligence swarms',
         ],
         exercises: [
           {
             id: 'ex-201-3-1',
-            title: 'Context Window Pruner',
+            title: 'Tactical Debate Engine',
             instructions:
-              'Retain the primary operational system prompt while pruning oldest dialogue turns.',
-            starterCode: `def prune_dialogue(messages: list, max_turns: int = 4) -> list:
-    if len(messages) <= max_turns:
-        return messages
-    return [messages[0]] + messages[-(max_turns - 1):]
+              'Execute an asynchronous multi-agent critique loop requiring supermajority agreement before plan commitment.',
+            starterCode: `import asyncio
+from typing import List, Dict, Any, Callable
+
+class TacticalDebateEngine:
+    def __init__(self, required_consensus_threshold: float = 0.67):
+        self.threshold = required_consensus_threshold
+
+    async def evaluate_strike_proposal(self, blue_plan: Dict[str, Any], red_critique: Dict[str, Any], evaluators: List[Callable]) -> Dict[str, Any]:
+        votes = []
+        for evaluator in evaluators:
+            vote = await evaluator(blue_plan, red_critique)
+            votes.append(vote)
+
+        favorable_votes = sum(1 for v in votes if v.get("approved"))
+        approval_ratio = favorable_votes / len(votes) if votes else 0.0
+
+        return {
+            "approved": approval_ratio >= self.threshold,
+            "consensus_ratio": round(approval_ratio, 3),
+            "total_evaluators": len(votes),
+            "critiques": [v.get("comment") for v in votes]
+        }
 `,
             language: 'python',
           },
@@ -367,23 +528,57 @@ print(f"Entities: {state.entities} | Confidence: {state.confidence_score} | Revi
       {
         id: 'mod-201-4',
         moduleNumber: 4,
-        title: 'Module 4: Human-in-the-Loop (HITL): Guardrails, Confidence & Breakers',
-        contactHours: 12,
+        title: 'Module 4: Human-in-the-Loop Gateways & Kinetic Authorization (DoDD 3000.09)',
+        contactHours: 11.25,
         learningObjectives: [
-          'Implement approval checkpoints on high-consequence operational actions',
-          'Calibrate Bayesian confidence scoring across agent consensus nodes',
-          'Emit tamper-evident RFC 5424 structured syslog audit records',
+          'Implement fail-closed human interception gateways on all kinetic or sensitive autonomous actions',
+          'Enforce DoD Directive 3000.09 compliance regarding appropriate levels of human judgment over the use of force',
+          'Generate cryptographically verifiable one-time authorization tokens for action resumption',
         ],
         exercises: [
           {
             id: 'ex-201-4-1',
-            title: 'HITL Approval Gate',
+            title: 'HITL Interception Gateway',
             instructions:
-              'Intercept actions that modify tactical routing or command status for human sign-off.',
-            starterCode: `def evaluate_hitl_gate(action: str, confidence: float) -> str:
-    if confidence < 0.80 or action in ["MODIFY_ROUTE", "TERMINATE_LINK"]:
-        return "AWAITING_HUMAN_APPROVAL"
-    return "AUTO_EXECUTE"
+              'Intercept kinetic authorizations into a suspended state until verified by a designated human operator.',
+            starterCode: `import uuid
+import time
+from typing import Dict, Any, Optional
+
+class HITLInterceptionGateway:
+    RESTRICTED_ACTIONS = {"KINETIC_AUTHORIZATION", "TARGET_ENGAGEMENT", "RESTRICTED_DB_WRITE"}
+
+    def __init__(self):
+        self.pending_interceptions: Dict[str, Dict[str, Any]] = {}
+
+    def intercept_or_proceed(self, action_type: str, action_payload: Dict[str, Any], agent_id: str) -> Dict[str, Any]:
+        if action_type not in self.RESTRICTED_ACTIONS:
+            return {"status": "PROCEED", "requires_hitl": False}
+
+        ticket_id = f"HITL-{uuid.uuid4().hex[:8].upper()}"
+        self.pending_interceptions[ticket_id] = {
+            "ticket_id": ticket_id,
+            "action_type": action_type,
+            "payload": action_payload,
+            "agent_id": agent_id,
+            "timestamp": time.time(),
+            "status": "AWAITING_HUMAN_APPROVAL"
+        }
+        return {
+            "status": "SUSPENDED",
+            "requires_hitl": True,
+            "ticket_id": ticket_id,
+            "message": f"Action '{action_type}' requires DoDD 3000.09 human operator sign-off."
+        }
+
+    def resolve_ticket(self, ticket_id: str, operator_id: str, approved: bool) -> Dict[str, Any]:
+        if ticket_id not in self.pending_interceptions:
+            return {"status": "ERROR", "message": "Invalid ticket ID."}
+        ticket = self.pending_interceptions[ticket_id]
+        ticket["status"] = "APPROVED" if approved else "REJECTED"
+        ticket["resolved_by"] = operator_id
+        ticket["resolved_at"] = time.time()
+        return {"status": "RESOLVED", "ticket": ticket}
 `,
             language: 'python',
           },

@@ -803,68 +803,380 @@ print(json.dumps(result, indent=2))
 });
 
 // ===========================================================================================
-// VAAI-201: Retrieval Augmented Generation & Vector Databases (45h)
+// VAAI-201: Autonomous Agent Architecture & Deterministic Workflows (45h / 4 modules)
+// Compliance: TWC-ETPL-78752-VAAI-201 | WIOA Title I >= 90% Floor | SOC 15-1251.00
 // ===========================================================================================
+
 reg({
   courseId: 'VAAI-201', moduleId: 'M1', lessonId: 'L1',
-  courseTitle: 'Retrieval Augmented Generation & Vector Databases',
-  moduleTitle: 'Module 1: Embedding Space Fundamentals',
-  lessonTitle: 'Vector Representations & Semantic Similarity',
-  lessonNumber: 1, totalLessonsInModule: 2, contactMinutes: 90,
+  courseTitle: 'Autonomous Agent Architecture & Deterministic Workflows',
+  moduleTitle: 'Module 1: Finite-State Machine Determinism & Acyclic Workflows (JP 3-0)',
+  lessonTitle: 'FSM Phased Execution & Acyclic Graph Coordination',
+  lessonNumber: 1, totalLessonsInModule: 1, contactMinutes: 675,
   learningObjectives: [
-    'Explain how text embeddings encode semantic meaning as high-dimensional vectors',
-    'Calculate cosine similarity between document embeddings',
-    'Evaluate embedding model selection for defense document retrieval',
+    'Deconstruct tactical military mission phases into discrete, acyclic state machine transitions',
+    'Implement deterministic step ceilings and loop tripwires to prevent infinite recursion in agent graphs',
+    'Apply Joint Publication JP 3-0 Joint Campaigns and Operations doctrinal phased transitions',
   ],
-  theoryMarkdown: `# Vector Representations & Semantic Similarity
+  theoryMarkdown: `# Finite-State Machine Determinism & Acyclic Workflows
 
-## What Are Embeddings?
-Embeddings transform text into dense numerical vectors where **semantically similar documents are geometrically close**.
+## Doctrinal Baseline: Joint Publication JP 3-0 (Joint Campaigns and Operations)
+In military operational design, operations are structured through phased campaigns (Phase 0: Shape, Phase I: Deter, Phase II: Seize Initiative, Phase III: Dominate, Phase IV: Stabilize, Phase V: Enable Civil Authority). Transitioning between phases requires explicit, verifiable commander conditions rather than arbitrary progression.
 
-## Cosine Similarity
+In autonomous defense AI architecture, this same phased rigor must be applied to agent graphs. Unconstrained LLM autonomous loops are prone to:
+1. **Infinite Reflexive Loops** — The agent repeatedly queries the same tool with minor parameter mutations without progressing toward mission goals.
+2. **State Drift** — Ambiguous intermediate outputs cause the agent to lose its operational boundary and regress to prior completed tasks.
+3. **Deadlocks & Halting Failures** — Mutually dependent agent nodes waiting indefinitely on unfulfilled preconditions.
+
 \`\`\`
-similarity = (A · B) / (||A|| × ||B||)
+   ┌─────────┐      Valid Intel      ┌──────────┐    Classification OK    ┌────────────┐
+   │ INGEST  │ ────────────────────> │ VALIDATE │ ──────────────────────> │ SYNTHESIZE │
+   └─────────┘                       └──────────┘                         └────────────┘
+        │                                 │                                      │
+        │ Error / Malformed               │ Clearance Failure                    │ Mission Complete
+        ▼                                 ▼                                      ▼
+   ┌─────────┐                       ┌──────────┐                         ┌────────────┐
+   │ FAILED  │ <──────────────────── │  FAILED  │                         │ TERMINATED │
+   └─────────┘                       └──────────┘                         └────────────┘
 \`\`\`
-Range: -1 (opposite) to +1 (identical meaning)
 
-## Defense Application
-Embedding-based retrieval enables:
-- Searching classified document archives by meaning, not keywords
-- Cross-referencing tactical reports across different formatting standards
-- Identifying duplicate or near-duplicate intelligence entries`,
-  exerciseTitle: 'Cosine Similarity Calculator',
-  exerciseInstructions: 'Implement cosine similarity calculation between two embedding vectors.',
-  starterCode: `import math
+## Finite-State Machine (FSM) Guarantees
+A deterministic agent must possess:
+- **Explicit Discrete States**: Enumerated states (e.g., \`INIT\`, \`INGEST\`, \`VALIDATE\`, \`SYNTHESIZE\`, \`TERMINATED\`, \`FAILED\`).
+- **Acyclic State Graph**: Transitions may only advance along authorized directed edges. Any backward edge must be explicitly budgeted.
+- **Maximum Step Ceiling**: A hard runtime counter (\`max_steps\`) that forcibly trips into \`FAILED\` or \`ESCALATE\` if exceeded, guaranteeing termination in bounded time.`,
+  exerciseTitle: 'Laboratory 1: Deterministic Multi-Agent State Machine & Acyclic DAG Coordinator',
+  exerciseInstructions: 'Implement a deterministic state coordinator enforcing linear phased transitions, acyclic graph validation, and maximum step execution ceilings.',
+  starterCode: `from enum import Enum
+from dataclasses import dataclass, field
+from typing import Dict, Any, List
 
-def cosine_similarity(vec_a: list[float], vec_b: list[float]) -> float:
-    """Calculate cosine similarity between two vectors."""
-    if len(vec_a) != len(vec_b):
-        raise ValueError("Vectors must have same dimensionality")
-    
-    dot_product = sum(a * b for a, b in zip(vec_a, vec_b))
-    magnitude_a = math.sqrt(sum(a ** 2 for a in vec_a))
-    magnitude_b = math.sqrt(sum(b ** 2 for b in vec_b))
-    
-    if magnitude_a == 0 or magnitude_b == 0:
-        return 0.0
-    
-    return dot_product / (magnitude_a * magnitude_b)
+class MissionPhase(str, Enum):
+    INGEST = "INGEST"
+    VALIDATE = "VALIDATE"
+    SYNTHESIZE = "SYNTHESIZE"
+    TERMINATED = "TERMINATED"
+    FAILED = "FAILED"
 
-# Test: similar military terms should have high similarity
-vec_sitrep = [0.8, 0.2, 0.9, 0.1, 0.7]
-vec_briefing = [0.75, 0.25, 0.85, 0.15, 0.65]
-vec_recipe = [0.1, 0.9, 0.05, 0.8, 0.1]
+@dataclass
+class AgentMissionState:
+    mission_id: str
+    current_phase: MissionPhase = MissionPhase.INGEST
+    intel_items: List[Dict[str, Any]] = field(default_factory=list)
+    errors: List[str] = field(default_factory=list)
+    step_count: int = 0
+    max_steps: int = 10
 
-print(f"SITREP vs Briefing: {cosine_similarity(vec_sitrep, vec_briefing):.4f}")
-print(f"SITREP vs Recipe: {cosine_similarity(vec_sitrep, vec_recipe):.4f}")`,
+class DeterministicMissionCoordinator:
+    def __init__(self, max_steps: int = 10):
+        self.max_steps = max_steps
+
+    def transition(self, state: AgentMissionState, action_result: Dict[str, Any]) -> AgentMissionState:
+        state.step_count += 1
+        if state.step_count > self.max_steps:
+            state.current_phase = MissionPhase.FAILED
+            state.errors.append("Max step ceiling exceeded: Execution aborted to prevent non-deterministic loop.")
+            return state
+
+        if state.current_phase == MissionPhase.INGEST:
+            if action_result.get("intel_valid"):
+                state.intel_items.append(action_result["data"])
+                state.current_phase = MissionPhase.VALIDATE
+            else:
+                state.errors.append("Ingestion rejected: Invalid intel structure.")
+                state.current_phase = MissionPhase.FAILED
+
+        elif state.current_phase == MissionPhase.VALIDATE:
+            if action_result.get("classification_verified"):
+                state.current_phase = MissionPhase.SYNTHESIZE
+            else:
+                state.errors.append("Security clearance verification failed.")
+                state.current_phase = MissionPhase.FAILED
+
+        elif state.current_phase == MissionPhase.SYNTHESIZE:
+            state.current_phase = MissionPhase.TERMINATED
+
+        return state
+
+# Test execution
+coordinator = DeterministicMissionCoordinator(max_steps=5)
+mission_state = AgentMissionState(mission_id="TASK-FORCE-ALPHA")
+
+# Transition 1: Ingestion
+mission_state = coordinator.transition(mission_state, {"intel_valid": True, "data": {"grid": "18SUJ2348006470", "threat": "HIGH"}})
+print(f"Step 1 Phase: {mission_state.current_phase.value} | Errors: {mission_state.errors}")
+
+# Transition 2: Security Validation
+mission_state = coordinator.transition(mission_state, {"classification_verified": True})
+print(f"Step 2 Phase: {mission_state.current_phase.value} | Errors: {mission_state.errors}")
+
+# Transition 3: Synthesis to Complete
+mission_state = coordinator.transition(mission_state, {})
+print(f"Final Phase: {mission_state.current_phase.value} | Steps: {mission_state.step_count}")`,
   language: 'python',
   keyTakeaways: [
-    'Embeddings encode semantic meaning, enabling meaning-based search',
-    'Cosine similarity is the standard metric for embedding comparison',
-    'Defense document retrieval benefits from domain-specific embedding models',
+    'Finite-state machines guarantee deterministic execution boundaries for mission-critical autonomy',
+    'Acyclic execution graphs ensure autonomous agent pipelines terminate without unhandled recursion',
+    'JP 3-0 phased operations architecture provides a battle-tested model for multi-stage operational pipelines',
   ],
-  militaryCrosswalkNote: 'Navy CTN / Air Force 1N4X1: Maps to intelligence analysis and data fusion techniques.',
+  militaryCrosswalkNote: 'Army 35F (Intelligence Analyst) / 25B (IT Specialist) / Navy CTN: Direct crosswalk to tactical intelligence fusion and automated battle-tracking workflows.',
+  nextLesson: { courseId: 'VAAI-201', moduleId: 'M2', lessonId: 'L1' },
 });
+
+reg({
+  courseId: 'VAAI-201', moduleId: 'M2', lessonId: 'L1',
+  courseTitle: 'Autonomous Agent Architecture & Deterministic Workflows',
+  moduleTitle: 'Module 2: Sandboxed Tool-Calling & RPC Schema Guardrails (NIST SP 800-218)',
+  lessonTitle: 'Hardened Tool Dispatchers & Pydantic Schema Validation',
+  lessonNumber: 1, totalLessonsInModule: 1, contactMinutes: 675,
+  learningObjectives: [
+    'Declare Pydantic schemas enforcing strict typing on external agent tool arguments',
+    'Implement Role-Based Access Control (RBAC) preventing unauthorized tool invocation in secure enclaves',
+    'Comply with NIST SP 800-218 Secure Software Development Framework tool boundary sandboxing',
+  ],
+  theoryMarkdown: `# Sandboxed Tool-Calling & RPC Schema Guardrails
+
+## Doctrinal Baseline: NIST SP 800-218 Secure Software Development Framework (SSDF)
+When an LLM agent invokes external tools (e.g., geospatial coordinate lookups, database queries, sensor telemetry parsers), it is executing **Remote Procedure Calls (RPCs)** across security boundaries. Under NIST SP 800-218, all inputs crossing trust boundaries must be strictly sanitized, authenticated, and authorized before execution.
+
+### Threat Vector: Unbounded Tool Execution
+Without rigid guardrails, adversarial prompt injection can trick an agent into:
+1. **Parameter Tampering** — Injecting command separators (\`;\`, \`&&\`, \`|\`) or SQL payloads into tool parameters.
+2. **Privilege Escalation** — Triggering privileged executive tools (e.g., weapon release, route override) using an unauthorized analyst session.
+3. **Arbitrary Function Calling** — Invoking unregistered or internal debugging tools.
+
+### Architectural Defense: Typed Schema Dispatcher
+Every tool in the agent runtime must be registered with:
+- **A Pydantic Validation Schema**: Every field must have explicit types, regex patterns, and range boundaries.
+- **Role-Based Access Control (RBAC)**: Only authorized caller roles (e.g., \`ANALYST\`, \`OFFICER\`) may invoke specific tools.
+- **Sandbox Execution**: Handlers execute with zero direct shell access and structured error interception.`,
+  exerciseTitle: 'Laboratory 2: Hardened Defense Tool Dispatcher & Constrained Function Calling',
+  exerciseInstructions: 'Construct a secure tool dispatcher that validates all function arguments against Pydantic models and enforces role-based execution barriers.',
+  starterCode: `from typing import Callable, Dict, Any
+from pydantic import BaseModel, Field, ValidationError
+
+class CoordinateLookupArgs(BaseModel):
+    mgrs_grid: str = Field(..., pattern=r"^\\d{1,2}[A-Z]{3}\\d{4,10}$")
+    elevation_required: bool = Field(default=False)
+
+class HardenedToolDispatcher:
+    def __init__(self):
+        self._registry: Dict[str, Dict[str, Any]] = {}
+
+    def register_tool(self, name: str, schema: type[BaseModel], handler: Callable, required_role: str):
+        self._registry[name] = {
+            "schema": schema,
+            "handler": handler,
+            "required_role": required_role
+        }
+
+    def dispatch(self, tool_name: str, raw_args: Dict[str, Any], caller_role: str) -> Dict[str, Any]:
+        if tool_name not in self._registry:
+            return {"status": "ERROR", "error": f"Tool '{tool_name}' is not registered in secure enclave."}
+        
+        tool = self._registry[tool_name]
+        if caller_role != tool["required_role"] and caller_role != "OFFICER":
+            return {"status": "DENIED", "error": f"Role '{caller_role}' lacks permission for '{tool_name}'."}
+
+        try:
+            validated_args = tool["schema"].model_validate(raw_args)
+            result = tool["handler"](validated_args)
+            return {"status": "SUCCESS", "data": result}
+        except ValidationError as err:
+            return {"status": "VALIDATION_FAILED", "error": err.errors()}
+
+# Test dispatcher
+dispatcher = HardenedToolDispatcher()
+def mock_coord_handler(args: CoordinateLookupArgs):
+    return {"grid": args.mgrs_grid, "elevation_m": 420.5}
+
+dispatcher.register_tool("lookup_mgrs", CoordinateLookupArgs, mock_coord_handler, "ANALYST")
+call_success = dispatcher.dispatch("lookup_mgrs", {"mgrs_grid": "18SUJ2348006470"}, "ANALYST")
+print("Valid Call:", call_success["status"])
+
+call_denied = dispatcher.dispatch("lookup_mgrs", {"mgrs_grid": "18SUJ2348006470"}, "GUEST")
+print("Denied Call:", call_denied["status"])
+
+call_invalid = dispatcher.dispatch("lookup_mgrs", {"mgrs_grid": "INVALID_GRID_COORDINATES"}, "ANALYST")
+print("Invalid Argument:", call_invalid["status"])`,
+  language: 'python',
+  keyTakeaways: [
+    'Treating tool calls as strongly typed RPCs prevents prompt-injected arbitrary code execution',
+    'NIST SP 800-218 SSDF mandates schema validation before external function execution',
+    'Role-Based Access Control ensures analyst agents cannot execute privileged officer-level commands',
+  ],
+  militaryCrosswalkNote: 'Air Force 1N0X1 / Navy CTN: Corresponds to network security protocol compliance and enclave execution isolation.',
+  previousLesson: { courseId: 'VAAI-201', moduleId: 'M1', lessonId: 'L1' },
+  nextLesson: { courseId: 'VAAI-201', moduleId: 'M3', lessonId: 'L1' },
+});
+
+reg({
+  courseId: 'VAAI-201', moduleId: 'M3', lessonId: 'L1',
+  courseTitle: 'Autonomous Agent Architecture & Deterministic Workflows',
+  moduleTitle: 'Module 3: Multi-Agent Consensus & Adversarial Debate Networks (FM 3-0)',
+  lessonTitle: 'Adversarial Debate Topologies & Quorum Consensus Mechanisms',
+  lessonNumber: 1, totalLessonsInModule: 1, contactMinutes: 675,
+  learningObjectives: [
+    'Construct asymmetric Red Team vs. Blue Team multi-agent debate loops',
+    'Implement supermajority consensus voting mechanisms (>= 67%) to filter hallucinations',
+    'Synchronize multi-domain operational plans in accordance with FM 3-0 Operations doctrine',
+  ],
+  theoryMarkdown: `# Multi-Agent Consensus & Adversarial Debate Networks
+
+## Doctrinal Baseline: Field Manual FM 3-0 Operations
+In Multi-Domain Operations (MDO), commanders never rely on a single sensor feed or intelligence stream. Operational plans are subject to rigorous red-teaming, cross-echelon synchronization, and intelligence cross-cueing across land, air, maritime, cyber, and space domains.
+
+### Mitigating Hallucinations via Multi-Agent Debate
+Single-agent LLM systems are inherently prone to **sycophancy** and **confirmation cascades** — once an agent makes an erroneous assumption, subsequent reasoning turns amplify the error.
+
+To achieve robust defense decision support:
+1. **Blue Proposer Agent**: Develops the initial operational course of action (COA).
+2. **Red Adversary Agent**: Actively challenges the COA, identifying collateral hazards, enemy counter-actions, and intelligence gaps.
+3. **Consensus Evaluator Quorum**: A committee of distinct evaluator nodes evaluates the debate and casts votes. A plan is only approved if it achieves supermajority agreement (>= 67%).`,
+  exerciseTitle: 'Laboratory 3: Multi-Agent Red/Blue Tactical Consensus Engine',
+  exerciseInstructions: 'Build an asynchronous tactical debate engine that evaluates Blue proposals against Red critiques with supermajority quorum gating.',
+  starterCode: `import asyncio
+from typing import List, Dict, Any, Callable
+
+class TacticalDebateEngine:
+    def __init__(self, required_consensus_threshold: float = 0.67):
+        self.threshold = required_consensus_threshold
+
+    async def evaluate_strike_proposal(self, blue_plan: Dict[str, Any], red_critique: Dict[str, Any], evaluators: List[Callable]) -> Dict[str, Any]:
+        votes = []
+        for evaluator in evaluators:
+            vote = await evaluator(blue_plan, red_critique)
+            votes.append(vote)
+
+        favorable_votes = sum(1 for v in votes if v.get("approved"))
+        approval_ratio = favorable_votes / len(votes) if votes else 0.0
+
+        return {
+            "approved": approval_ratio >= self.threshold,
+            "consensus_ratio": round(approval_ratio, 3),
+            "total_evaluators": len(votes),
+            "critiques": [v.get("comment") for v in votes]
+        }
+
+# Mock evaluators
+async def legal_evaluator(plan, critique):
+    return {"approved": True, "comment": "Law of Armed Conflict (LOAC) criteria satisfied."}
+
+async def logistics_evaluator(plan, critique):
+    return {"approved": True, "comment": "Fuel and munition supplies adequate."}
+
+async def intelligence_evaluator(plan, critique):
+    # Dissenting vote based on Red critique
+    return {"approved": False, "comment": "Secondary collateral risk identified in sector."}
+
+async def main():
+    engine = TacticalDebateEngine(required_consensus_threshold=0.67)
+    blue_plan = {"target": "SAM Battery", "ordnance": "Precision GBU"}
+    red_critique = {"counter_fire_risk": "HIGH", "civilian_proximity_m": 450}
+    
+    result = await engine.evaluate_strike_proposal(blue_plan, red_critique, [legal_evaluator, logistics_evaluator, intelligence_evaluator])
+    print(f"Approved: {result['approved']} | Ratio: {result['consensus_ratio']} | Total: {result['total_evaluators']}")
+
+asyncio.run(main())`,
+  language: 'python',
+  keyTakeaways: [
+    'Adversarial debate networks eliminate single-agent confirmation bias and hallucinated facts',
+    'Supermajority consensus thresholds ensure battle-tracking decisions are mathematically robust',
+    'FM 3-0 multi-domain doctrine provides the structural framework for cross-functional agent swarms',
+  ],
+  militaryCrosswalkNote: 'Army 35F / Marine Corps 0231: Maps directly to intelligence preparation of the battlefield (IPB) and Red Team wargaming.',
+  previousLesson: { courseId: 'VAAI-201', moduleId: 'M2', lessonId: 'L1' },
+  nextLesson: { courseId: 'VAAI-201', moduleId: 'M4', lessonId: 'L1' },
+});
+
+reg({
+  courseId: 'VAAI-201', moduleId: 'M4', lessonId: 'L1',
+  courseTitle: 'Autonomous Agent Architecture & Deterministic Workflows',
+  moduleTitle: 'Module 4: Human-in-the-Loop Gateways & Kinetic Authorization (DoDD 3000.09)',
+  lessonTitle: 'Fail-Closed Interception Gateways & Token Authorization',
+  lessonNumber: 1, totalLessonsInModule: 1, contactMinutes: 675,
+  learningObjectives: [
+    'Implement fail-closed interception gateways on all kinetic, fire-control, and restricted database operations',
+    'Enforce DoD Directive 3000.09 requirements for appropriate levels of human judgment over the use of force',
+    'Generate and verify single-use cryptographic authorization tokens for human operator sign-off',
+  ],
+  theoryMarkdown: `# Human-in-the-Loop Gateways & Kinetic Authorization
+
+## Doctrinal Baseline: DoD Directive 3000.09 (Autonomy in Weapon Systems)
+DoD Directive 3000.09 establishes U.S. Department of Defense policy requiring that autonomous and semi-autonomous weapon systems be designed to allow commanders and operators to exercise **appropriate levels of human judgment over the use of force**.
+
+### Autonomous Systems Categorization
+1. **Semi-Autonomous**: Autonomous systems that undertake engagement only after a human operator selects a specific target or targets.
+2. **Human-Supervised Autonomous**: Systems with autonomous target selection and engagement, but designed to allow human operators to monitor execution and intervene/abort.
+3. **Autonomous Weapon Systems**: Systems that once activated, can select and engage targets without further human intervention (strictly governed and restricted).
+
+### The Fail-Closed Interception Gateway Pattern
+In any defense pipeline integrating agentic reasoning with operational systems:
+- **Restricted Action Trap**: Actions classified as \`KINETIC_AUTHORIZATION\`, \`TARGET_ENGAGEMENT\`, or \`RESTRICTED_DB_WRITE\` cannot be self-executed by an LLM agent.
+- **Execution Suspension**: When an agent requests a restricted action, execution is immediately frozen and placed into \`AWAITING_HUMAN_APPROVAL\`.
+- **Cryptographic Ticket Issuance**: A secure ticket is dispatched to the human operator console.
+- **Token Verification**: Resumption requires the verified cryptographic signature of an authorized human operator.`,
+  exerciseTitle: 'Laboratory 4: DoDD 3000.09 Human-in-the-Loop Interceptor Gateway',
+  exerciseInstructions: 'Implement a non-bypassable HITL gateway that intercepts restricted actions and freezes agent execution pending human authorization ticket resolution.',
+  starterCode: `import uuid
+import time
+from typing import Dict, Any, Optional
+
+class HITLInterceptionGateway:
+    RESTRICTED_ACTIONS = {"KINETIC_AUTHORIZATION", "TARGET_ENGAGEMENT", "RESTRICTED_DB_WRITE"}
+
+    def __init__(self):
+        self.pending_interceptions: Dict[str, Dict[str, Any]] = {}
+
+    def intercept_or_proceed(self, action_type: str, action_payload: Dict[str, Any], agent_id: str) -> Dict[str, Any]:
+        if action_type not in self.RESTRICTED_ACTIONS:
+            return {"status": "PROCEED", "requires_hitl": False}
+
+        ticket_id = f"HITL-{uuid.uuid4().hex[:8].upper()}"
+        self.pending_interceptions[ticket_id] = {
+            "ticket_id": ticket_id,
+            "action_type": action_type,
+            "payload": action_payload,
+            "agent_id": agent_id,
+            "timestamp": time.time(),
+            "status": "AWAITING_HUMAN_APPROVAL"
+        }
+        return {
+            "status": "SUSPENDED",
+            "requires_hitl": True,
+            "ticket_id": ticket_id,
+            "message": f"Action '{action_type}' requires DoDD 3000.09 human operator sign-off."
+        }
+
+    def resolve_ticket(self, ticket_id: str, operator_id: str, approved: bool) -> Dict[str, Any]:
+        if ticket_id not in self.pending_interceptions:
+            return {"status": "ERROR", "message": "Invalid ticket ID."}
+        ticket = self.pending_interceptions[ticket_id]
+        ticket["status"] = "APPROVED" if approved else "REJECTED"
+        ticket["resolved_by"] = operator_id
+        ticket["resolved_at"] = time.time()
+        return {"status": "RESOLVED", "ticket": ticket}
+
+# Test execution
+gateway = HITLInterceptionGateway()
+non_kinetic = gateway.intercept_or_proceed("QUERY_INTEL", {"grid": "18SUJ2348006470"}, "AGENT-01")
+print("Non-kinetic:", non_kinetic["status"])
+
+kinetic = gateway.intercept_or_proceed("KINETIC_AUTHORIZATION", {"target_id": "TGT-994"}, "STRIKE-AGENT")
+print("Kinetic action:", kinetic["status"], "| Ticket:", kinetic["ticket_id"])
+
+resolved = gateway.resolve_ticket(kinetic["ticket_id"], "OPERATOR-CAPT-MILLER", True)
+print("Resolved Ticket:", resolved["ticket"]["status"], "| Operator:", resolved["ticket"]["resolved_by"])`,
+  language: 'python',
+  keyTakeaways: [
+    'DoDD 3000.09 strictly prohibits autonomous release of kinetic force without explicit human oversight',
+    'Fail-closed architecture guarantees that connection loss or timeout aborts dangerous operations',
+    'Cryptographic ticketing maintains a complete chain of custody and RFC 5424 audit trail for legal accountability',
+  ],
+  militaryCrosswalkNote: 'All MOS/AFSC: Essential operational compliance for any personnel handling autonomous defense systems or targeting packages.',
+  previousLesson: { courseId: 'VAAI-201', moduleId: 'M3', lessonId: 'L1' },
+});
+
 
 // ===========================================================================================
 // Generate stub entries for remaining courses (VAAI-202 through VAAI-403)

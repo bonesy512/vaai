@@ -5,6 +5,7 @@ import { notFound } from 'next/navigation';
 import { ChevronLeft, Terminal, Shield, Award } from 'lucide-react';
 import { getCourseById } from '@/lib/courses-data';
 import { getModuleExam } from '@/lib/vaai-101-assessment-data';
+import { getVAAI201ModuleExam } from '@/lib/vaai-201-assessment-data';
 import { ModuleExamCard } from '@/components/lms/module-exam-card';
 import { CapstoneEvaluationRunner } from '@/components/lms/capstone-evaluation-runner';
 
@@ -12,16 +13,24 @@ interface ExamPageProps {
   params: Promise<{ courseId: string; moduleId: string }>;
 }
 
+function resolveExam(courseId: string, moduleId: string) {
+  if (courseId === 'VAAI-201') {
+    return getVAAI201ModuleExam(moduleId);
+  }
+  return getModuleExam(moduleId);
+}
+
 export async function generateMetadata({ params }: ExamPageProps): Promise<Metadata> {
   const { courseId, moduleId } = await params;
   const course = getCourseById(courseId);
   const isCapstone = moduleId.toLowerCase() === 'capstone';
-  const exam = getModuleExam(moduleId);
+  const exam = resolveExam(courseId, moduleId);
+  const accreditationCode = courseId === 'VAAI-201' ? 'TWC-ETPL-78752-VAAI-201' : 'TWC-ETPL-78752-VAAI-101';
 
   if (isCapstone) {
     return {
       title: `Capstone Defense & Evaluation | ${course?.title || courseId}`,
-      description: `4-Dimension Automated WASM Defense Capstone Harness. TWC ETPL #TWC-ETPL-78752-VAAI-101.`,
+      description: `4-Dimension Automated WASM Defense Capstone Harness. TWC ETPL #${accreditationCode}.`,
     };
   }
 
@@ -39,7 +48,8 @@ export default async function ExamPage({ params }: ExamPageProps) {
   const { courseId, moduleId } = await params;
   const course = getCourseById(courseId);
   const isCapstone = moduleId.toLowerCase() === 'capstone';
-  const exam = getModuleExam(moduleId);
+  const exam = resolveExam(courseId, moduleId);
+  const accreditationCode = courseId === 'VAAI-201' ? 'TWC-ETPL-78752-VAAI-201' : 'TWC-ETPL-78752-VAAI-101';
 
   if (!isCapstone && !exam) {
     notFound();
@@ -72,7 +82,7 @@ export default async function ExamPage({ params }: ExamPageProps) {
 
           <div className="flex items-center gap-2">
             <span className="text-slate-600">ACCREDITATION:</span>
-            <span className="text-emerald-400 font-semibold">TWC-ETPL-78752-VAAI-101</span>
+            <span className="text-emerald-400 font-semibold">{accreditationCode}</span>
           </div>
         </div>
 
@@ -92,3 +102,4 @@ export default async function ExamPage({ params }: ExamPageProps) {
     </div>
   );
 }
+
