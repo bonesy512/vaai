@@ -1,0 +1,143 @@
+name: VAAI Enterprise CI/CD & GovSec Quality Gate
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # -------------------------------------------------------------
+  # Job 1: Static Analysis & Strict TypeScript Typecheck
+  # -------------------------------------------------------------
+  typecheck-and-lint:
+    name: Static Typecheck & Lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js Runtime (v20.x)
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20.x
+          cache: 'npm'
+
+      - name: Clean Dependency Installation
+        run: npm ci
+
+      - name: Strict TypeScript Compilation (Zero Errors Gate)
+        run: npx tsc --noEmit
+
+  # -------------------------------------------------------------
+  # Job 2: Next.js 16 Production Build
+  # -------------------------------------------------------------
+  build:
+    name: Next.js 16 Turbopack Production Build
+    needs: typecheck-and-lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js Runtime (v20.x)
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20.x
+          cache: 'npm'
+
+      - name: Clean Dependency Installation
+        run: npm ci
+
+      - name: Next.js Cache Restoration
+        uses: actions/cache@v4
+        with:
+          path: ${{ github.workspace }}/.next/cache
+          key: ${{ runner.os }}-nextjs-${{ hashFiles('**/package-lock.json') }}-${{ hashFiles('**/*.ts', '**/*.tsx', '**/*.js', '**/*.jsx') }}
+          restore-keys: |
+            ${{ runner.os }}-nextjs-${{ hashFiles('**/package-lock.json') }}-
+
+      - name: Production Bundle Compilation
+        run: npm run build
+
+  # -------------------------------------------------------------
+  # Job 3: GovSec & Edge Defense Verification Suite
+  # -------------------------------------------------------------
+  govsec-edge-defense:
+    name: GovSec Baseline & Edge Defense Verification
+    needs: typecheck-and-lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js Runtime (v20.x)
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20.x
+          cache: 'npm'
+
+      - name: Clean Dependency Installation
+        run: npm ci
+
+      - name: Edge Security Middleware & CUI Shield Test
+        run: npx tsx scratch/test_edge_defense.ts
+
+      - name: GovSec Baseline & HMAC-SHA256 Audit Chain Test
+        run: npx tsx scratch/test_govsec_baseline.js
+
+      - name: NIST SP 800-171 / CMMC VSA Response Package Test
+        run: npx tsx scratch/test_vsa_package.ts
+
+  # -------------------------------------------------------------
+  # Job 4: Apex LMS & Telemetry Verification Suite
+  # -------------------------------------------------------------
+  lms-telemetry:
+    name: Apex LMS WASM Sandbox & Rubric Grader Verification
+    needs: typecheck-and-lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js Runtime (v20.x)
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20.x
+          cache: 'npm'
+
+      - name: Clean Dependency Installation
+        run: npm ci
+
+      - name: Apex LMS Engine, Skills Graph & Interaction Telemetry Test
+        run: npx tsx scratch/test_apex_lms.ts
+
+  # -------------------------------------------------------------
+  # Job 5: Persistence, Seeder & WIOA PIRL Verification Suite
+  # -------------------------------------------------------------
+  persistence-pirl:
+    name: Supabase Persistence & 90-Field PIRL Verification
+    needs: typecheck-and-lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js Runtime (v20.x)
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20.x
+          cache: 'npm'
+
+      - name: Clean Dependency Installation
+        run: npm ci
+
+      - name: Supabase PostgreSQL Schema & RLS Verification
+        run: npx tsx scratch/test_db_migration.ts
+
+      - name: Pilot Cohort Seeder & 90-Field WIOA PIRL Verification
+        run: npx tsx scratch/test_integrated_pipeline.ts
