@@ -27,10 +27,12 @@ export default function EnterpriseEmployersLayout({
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col">
       {/* CUI / FEDCON Security Classification Top Banner */}
-      <SecurityClassificationBanner position="top" />
+      <div className="print:hidden">
+        <SecurityClassificationBanner position="top" />
+      </div>
 
       {/* Top Enterprise Partner Nav */}
-      <header className="border-b border-slate-800 bg-slate-900/90 backdrop-blur sticky top-0 z-30">
+      <header className="border-b border-slate-800 bg-slate-900/90 backdrop-blur sticky top-0 z-30 print:hidden">
         <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-3 sm:px-6">
           <div className="flex items-center space-x-3">
             <Link href="/employers" className="flex items-center space-x-2">
@@ -55,6 +57,14 @@ export default function EnterpriseEmployersLayout({
             >
               <Users className="h-3.5 w-3.5 text-slate-400" />
               Candidate Directory
+            </Link>
+
+            <Link
+              href="/employers/training-brochure"
+              className="text-amber-400 hover:text-amber-300 transition-colors flex items-center gap-1.5"
+            >
+              <Award className="h-3.5 w-3.5 text-amber-400" />
+              Training Brochure
             </Link>
 
             <Link
@@ -98,13 +108,17 @@ export default function EnterpriseEmployersLayout({
       <div className="flex-1">{children}</div>
 
       {/* Footer */}
-      <footer className="border-t border-slate-800/80 bg-slate-950 py-6 text-center text-xs text-slate-500">
+      <footer className="border-t border-slate-800/80 bg-slate-950 py-6 text-center text-xs text-slate-500 print:hidden">
         <div className="mx-auto max-w-7xl px-4 flex flex-col sm:flex-row items-center justify-between gap-2">
           <div>
             &copy; 2026 Veteran AI Enablement Initiative (VAAI) LLC. Texas Workforce Commission ETPL Provider.
           </div>
           <div className="flex items-center space-x-3 text-[11px]">
             <span className="text-slate-400 font-mono">Title 38 U.S.C. §§ 5901–5905 Safe Harbor</span>
+            <span>•</span>
+            <Link href="/employers/training-brochure" className="text-amber-400 hover:underline">
+              B2B Defense Catalog
+            </Link>
             <span>•</span>
             <Link href="/etpl-dossier" className="text-amber-400 hover:underline">
               PIRL Compliance Audit

@@ -24,24 +24,51 @@ import {
   BookOpen,
   Briefcase,
   Users,
+  Code2,
+  Terminal,
+  Layers,
+  Search,
 } from 'lucide-react';
 import {
   VAAI_ETPL_NARRATIVE,
   VAAI_SOC_CIP_CROSSWALK,
-  VAAI_CURRICULUM_MATRIX,
   VAAI_PERFORMANCE_BASELINE,
   SAMPLE_PIRL_COHORT,
   VAAI_TWC_COVER_LETTER,
+  PROGRAMMATIC_SCHEDULE_10_COURSES,
   exportWioaPirlCsv,
   exportTwcCoverLetterMarkdown,
 } from '@/lib/etpl-filing-data';
+import { INSTITUTIONAL_COURSES, getCatalogSummary, getCourseById } from '@/lib/courses-data';
+import {
+  CourseProgramTable,
+  COURSE_CREDENTIALS,
+  SOC_DESCRIPTIONS,
+  getTwcProgramCode,
+  getTelemetryFloorHours,
+  getTelemetryFloorSeconds,
+} from '@/components/etpl/course-program-table';
+import type { Course } from '@/lib/types/course';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 
 export default function EtplDossierPage() {
   const [activeTab, setActiveTab] = React.useState<'all' | 'letter' | 'dossier'>('all');
+  const [selectedCourseId, setSelectedCourseId] = React.useState<string>('VAAI-101');
   const [downloadSuccess, setDownloadSuccess] = React.useState<string | null>(null);
+
+  const selectedCourse = React.useMemo(() => {
+    return getCourseById(selectedCourseId) || INSTITUTIONAL_COURSES[0];
+  }, [selectedCourseId]);
+
+  const catalogSummary = React.useMemo(() => {
+    return getCatalogSummary();
+  }, []);
+
+  const totalCatalogHours = catalogSummary.totalClockHours;
+  const totalCatalogCeus = totalCatalogHours / 10;
+  const telemetryFloorHours = Number((totalCatalogHours * 0.9).toFixed(1));
 
   const handlePrint = () => {
     if (typeof window !== 'undefined') {
@@ -55,7 +82,7 @@ export default function EtplDossierPage() {
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.setAttribute('download', `WIOA_PIRL_AUDIT_EXPORT_${new Date().toISOString().slice(0, 10)}.csv`);
+    link.setAttribute('download', `WIOA_PIRL_AUDIT_EXPORT_10_COURSES_${new Date().toISOString().slice(0, 10)}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -79,10 +106,6 @@ export default function EtplDossierPage() {
     setTimeout(() => setDownloadSuccess(null), 3000);
   };
 
-  const totalLectureHours = VAAI_CURRICULUM_MATRIX.reduce((s, m) => s + m.lectureHours, 0);
-  const totalLabHours = VAAI_CURRICULUM_MATRIX.reduce((s, m) => s + m.labHours, 0);
-  const totalClockHours = VAAI_CURRICULUM_MATRIX.reduce((s, m) => s + m.totalHours, 0);
-
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 print:bg-white print:text-black">
       {/* Screen-Only Header & Action Toolbar */}
@@ -98,6 +121,13 @@ export default function EtplDossierPage() {
             </Link>
             <span className="text-slate-700">/</span>
             <Link
+              href="/employers/training-brochure"
+              className="text-xs text-slate-400 hover:text-amber-400 transition-colors"
+            >
+              B2B Brochure
+            </Link>
+            <span className="text-slate-700">/</span>
+            <Link
               href="/vendor-security-assessment"
               className="text-xs text-slate-400 hover:text-slate-200 transition-colors"
             >
@@ -105,7 +135,7 @@ export default function EtplDossierPage() {
             </Link>
             <span className="text-slate-700">/</span>
             <span className="text-xs font-semibold uppercase tracking-wider text-amber-500">
-              State ETPL Accreditation Filing
+              State ETPL Accreditation (10 Programs)
             </span>
           </div>
 
@@ -176,7 +206,7 @@ export default function EtplDossierPage() {
             <div>
               <div className="inline-flex items-center space-x-2 rounded-md bg-amber-500/20 print:bg-transparent border border-amber-500/40 print:border-black px-2.5 py-1 text-xs font-mono font-semibold text-amber-400 print:text-black">
                 <ShieldCheck className="h-3.5 w-3.5 mr-1 text-amber-400 print:text-black" />
-                TEXAS WORKFORCE COMMISSION // FORM ETPL-300
+                TEXAS WORKFORCE COMMISSION // FORM ETPL-300 (10-COURSE ACCREDITED PORTFOLIO)
               </div>
               <h1 className="mt-3 text-2xl sm:text-3xl font-extrabold tracking-tight text-white print:text-black">
                 State Eligible Training Provider List (ETPL) Application
@@ -187,13 +217,56 @@ export default function EtplDossierPage() {
             </div>
 
             <div className="rounded-lg border border-slate-800 print:border-black bg-slate-900/80 print:bg-white p-3.5 text-right font-mono">
-              <div className="text-xs text-slate-400 print:text-black">Provider Tracking ID</div>
+              <div className="text-xs text-slate-400 print:text-black">Primary Provider ID</div>
               <div className="text-sm font-bold text-amber-400 print:text-black">
                 {VAAI_ETPL_NARRATIVE.twcProviderId}
               </div>
               <div className="mt-1 text-xs text-slate-400 print:text-black">Statutory Base</div>
               <div className="text-xs font-semibold text-slate-300 print:text-black font-sans">
-                WIOA Title I / Title 38 U.S.C.
+                WIOA Title I / Title 38 U.S.C. Safe Harbor
+              </div>
+            </div>
+          </div>
+
+          {/* Accredited Program Portfolio Summary HUD */}
+          <div className="mt-6 pt-5 border-t border-amber-500/30 print:border-black grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+            <div className="rounded border border-slate-800 bg-slate-950/60 p-3 print:border-slate-300 print:bg-white">
+              <div className="text-slate-400 print:text-slate-700 font-medium">State Accredited Programs</div>
+              <div className="text-xl font-bold font-mono text-amber-400 print:text-black mt-0.5">
+                {catalogSummary.totalCourses} Programs
+              </div>
+              <div className="text-[10px] text-slate-500 print:text-slate-600 mt-0.5 font-mono">
+                VAAI-101 to VAAI-403
+              </div>
+            </div>
+
+            <div className="rounded border border-slate-800 bg-slate-950/60 p-3 print:border-slate-300 print:bg-white">
+              <div className="text-slate-400 print:text-slate-700 font-medium">Cumulative Clock Hours</div>
+              <div className="text-xl font-bold font-mono text-white print:text-black mt-0.5">
+                {totalCatalogHours} Hours
+              </div>
+              <div className="text-[10px] text-slate-500 print:text-slate-600 mt-0.5 font-mono">
+                {totalCatalogCeus.toFixed(1)} Cumulative CEUs
+              </div>
+            </div>
+
+            <div className="rounded border border-slate-800 bg-slate-950/60 p-3 print:border-slate-300 print:bg-white">
+              <div className="text-slate-400 print:text-slate-700 font-medium">Verified Active Telemetry Floor</div>
+              <div className="text-xl font-bold font-mono text-emerald-400 print:text-black mt-0.5">
+                &ge; {telemetryFloorHours}h
+              </div>
+              <div className="text-[10px] text-slate-500 print:text-slate-600 mt-0.5 font-mono">
+                &ge; 90% Mandatory Seat Time
+              </div>
+            </div>
+
+            <div className="rounded border border-slate-800 bg-slate-950/60 p-3 print:border-slate-300 print:bg-white">
+              <div className="text-slate-400 print:text-slate-700 font-medium">Curricular Tracks</div>
+              <div className="text-sm font-bold font-mono text-sky-400 print:text-black mt-1">
+                Eng {catalogSummary.trackHours.engineering}h • Sec {catalogSummary.trackHours.security}h • Ops {catalogSummary.trackHours.operations}h
+              </div>
+              <div className="text-[10px] text-slate-500 print:text-slate-600 mt-0.5 font-mono">
+                5 Eng / 3 Sec / 2 Ops
               </div>
             </div>
           </div>
@@ -246,23 +319,75 @@ export default function EtplDossierPage() {
                 {VAAI_TWC_COVER_LETTER.executiveSummary}
               </p>
 
+              {/* Itemized 10-Row Programmatic Schedule */}
+              <div className="pt-2">
+                <h3 className="font-bold text-white print:text-black text-xs uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                  <GraduationCap className="h-4 w-4 text-amber-400" />
+                  Itemized 10-Program Accredited Schedule &amp; Approved Voucher Baselines
+                </h3>
+                <div className="overflow-x-auto rounded border border-slate-800 print:border-black">
+                  <table className="w-full text-left text-[11px]">
+                    <thead className="bg-slate-950 print:bg-slate-100 text-slate-300 print:text-black font-semibold border-b border-slate-800 print:border-black">
+                      <tr>
+                        <th className="p-2">Course ID</th>
+                        <th className="p-2">State Program Code</th>
+                        <th className="p-2">Title</th>
+                        <th className="p-2">O*NET SOC</th>
+                        <th className="p-2 text-center">Hours (CEU)</th>
+                        <th className="p-2 text-right">Tuition (ITA)</th>
+                        <th className="p-2">Exit Credential</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-800/60 print:divide-slate-200">
+                      {PROGRAMMATIC_SCHEDULE_10_COURSES.map((item) => (
+                        <tr key={item.courseId}>
+                          <td className="p-2 font-mono font-bold text-amber-400 print:text-black">{item.courseId}</td>
+                          <td className="p-2 font-mono text-[10px] text-slate-400 print:text-slate-700">{item.programCode}</td>
+                          <td className="p-2 font-semibold text-white print:text-black">{item.title}</td>
+                          <td className="p-2 font-mono text-emerald-400 print:text-black">{item.socCode}</td>
+                          <td className="p-2 text-center font-mono">{item.clockHours}h ({(item.clockHours / 10).toFixed(1)})</td>
+                          <td className="p-2 text-right font-mono font-semibold text-amber-400 print:text-black">
+                            ${item.approvedTuition.toLocaleString()}
+                          </td>
+                          <td className="p-2 text-slate-300 print:text-black truncate max-w-xs">{item.exitCredential}</td>
+                        </tr>
+                      ))}
+                      <tr className="bg-slate-950/80 print:bg-slate-100 font-bold border-t-2 border-slate-700 print:border-black text-white print:text-black">
+                        <td colSpan={4} className="p-2 uppercase tracking-wider">
+                          Portfolio Aggregate (10 Accredited Programs)
+                        </td>
+                        <td className="p-2 text-center font-mono text-amber-400 print:text-black">
+                          {totalCatalogHours}h ({totalCatalogCeus.toFixed(1)} CEU)
+                        </td>
+                        <td className="p-2 text-right font-mono text-amber-400 print:text-black">
+                          ${PROGRAMMATIC_SCHEDULE_10_COURSES.reduce((sum, c) => sum + c.approvedTuition, 0).toLocaleString()}
+                        </td>
+                        <td className="p-2 text-emerald-400 print:text-black font-mono text-[10px]">
+                          OpenBadges v3.0 Assertions
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
               {/* Sub-block: Program Classification */}
               <div className="pt-2">
                 <h3 className="font-bold text-white print:text-black text-xs uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
-                  <GraduationCap className="h-4 w-4 text-amber-400" />
-                  Program Classification &amp; Occupational Alignment
+                  <BookOpen className="h-4 w-4 text-sky-400" />
+                  Program Classification &amp; Labor Market Alignment
                 </h3>
                 <p className="mb-2">
-                  The CAIO Level 1 curriculum addresses critical regional and statewide shortages in advanced digital operations and artificial intelligence integration. The program is formally crosswalked to federal and state labor taxonomies:
+                  The curriculum addresses critical regional and statewide shortages in advanced AI systems, cyber defense operations, and GovCon proposal execution. The programs are formally crosswalked to federal and state labor taxonomies:
                 </p>
                 <ul className="list-disc pl-5 space-y-1">
                   <li>
                     <strong>Classification of Instructional Programs (CIP):</strong>{' '}
-                    {VAAI_TWC_COVER_LETTER.classificationAndTaxonomy.cipCodes.join(' and ')}.
+                    {VAAI_TWC_COVER_LETTER.classificationAndTaxonomy.cipCodes.join(', ')}.
                   </li>
                   <li>
                     <strong>Standard Occupational Classification (SOC):</strong>{' '}
-                    {VAAI_TWC_COVER_LETTER.classificationAndTaxonomy.socCodes.join(' and ')}.
+                    {VAAI_TWC_COVER_LETTER.classificationAndTaxonomy.socCodes.join(', ')}.
                   </li>
                   <li>
                     <strong>Curriculum Structure:</strong>{' '}
@@ -271,14 +396,14 @@ export default function EtplDossierPage() {
                 </ul>
               </div>
 
-              {/* Sub-block: Verified Instructional Rigor */}
+              {/* Sub-block: Verified Instructional Rigor & NIST Posture */}
               <div className="pt-2">
                 <h3 className="font-bold text-white print:text-black text-xs uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
                   <ShieldCheck className="h-4 w-4 text-emerald-400" />
-                  Verified Instructional Rigor &amp; Telemetry Compliance
+                  Verified Instructional Rigor, NIST SP 800-171 Rev. 3 &amp; Telemetry Compliance
                 </h3>
                 <p className="mb-2">
-                  To meet and exceed TWC and WIOA program accountability standards, VAAI enforces strict instructional integrity safeguards:
+                  To meet and exceed TWC and WIOA program accountability standards while maintaining full defense compliance:
                 </p>
                 <ol className="list-decimal pl-5 space-y-1.5">
                   <li>
@@ -289,6 +414,9 @@ export default function EtplDossierPage() {
                   </li>
                   <li>
                     <strong>Statutory Safe Harbor Guardrails:</strong> {VAAI_TWC_COVER_LETTER.instructionalRigor.safeHarborGuardrails}
+                  </li>
+                  <li>
+                    <strong>NIST SP 800-171 Rev. 3 Posture:</strong> {VAAI_TWC_COVER_LETTER.instructionalRigor.edgeSecurityNist} All labs execute in zero-retention client-side WebAssembly / Pyodide sandboxes, ensuring zero server-side PII exposure and preventing infrastructure creep.
                   </li>
                 </ol>
               </div>
@@ -423,12 +551,12 @@ export default function EtplDossierPage() {
                   </CardHeader>
                   <CardContent className="text-xs space-y-2 text-slate-400 print:text-black">
                     <div>
-                      <span className="font-semibold text-slate-200 print:text-black">Required Clock Hours:</span>{' '}
-                      {VAAI_ETPL_NARRATIVE.attendancePolicy.requiredClockHours} Hours
+                      <span className="font-semibold text-slate-200 print:text-black">Catalog Total Clock Hours:</span>{' '}
+                      {totalCatalogHours} Hours (42.5 CEUs across 10 Programs)
                     </div>
                     <div>
-                      <span className="font-semibold text-slate-200 print:text-black">Mandatory Verified Seat Time:</span>{' '}
-                      {VAAI_ETPL_NARRATIVE.attendancePolicy.minimumSeatTimeHours} Hours (129,600 Seconds)
+                      <span className="font-semibold text-slate-200 print:text-black">Mandatory Active Seat Time:</span>{' '}
+                      &ge; {telemetryFloorHours} Cumulative Hours (&ge; 90% floor)
                     </div>
                     <div>
                       <span className="font-semibold text-slate-200 print:text-black">Audit Telemetry:</span>{' '}
@@ -466,64 +594,181 @@ export default function EtplDossierPage() {
               </div>
             </section>
 
-            {/* EXHIBIT B: 40-Clock-Hour Curriculum Matrix */}
+            {/* EXHIBIT B: 10-Program Accredited Master Curriculum Matrix & Interactive Auditor */}
             <section id="exhibit-b" className="space-y-6 scroll-mt-20">
               <div className="border-b border-slate-800 pb-3 print:border-black flex items-center justify-between">
-                <h2 className="text-xl font-bold tracking-tight text-amber-400 print:text-black flex items-center">
-                  <GraduationCap className="mr-2 h-5 w-5" />
-                  Exhibit B: 40-Clock-Hour Master Syllabus &amp; Rubric Passing Standards
-                </h2>
+                <div>
+                  <h2 className="text-xl font-bold tracking-tight text-amber-400 print:text-black flex items-center">
+                    <GraduationCap className="mr-2 h-5 w-5" />
+                    Exhibit B: 10-Program Accredited Master Curriculum Matrix &amp; Syllabi
+                  </h2>
+                  <p className="text-xs text-slate-400 print:text-slate-600 mt-1">
+                    425.0 Cumulative Clock Hours (42.5 CEUs) across 10 modularized state credentials with &ge;90% telemetry floors.
+                  </p>
+                </div>
                 <Badge variant="outline" className="border-amber-500/40 text-amber-300 font-mono text-[10px]">
                   EXHIBIT B
                 </Badge>
               </div>
 
-              <div className="overflow-x-auto rounded-lg border border-slate-800 print:border-black">
-                <table className="w-full text-left text-xs">
-                  <thead className="border-b border-slate-800 print:border-black bg-slate-900 print:bg-neutral-100 font-semibold text-slate-200 print:text-black">
-                    <tr>
-                      <th className="p-3">Module</th>
-                      <th className="p-3">Instructional Title</th>
-                      <th className="p-3 text-center">Lecture</th>
-                      <th className="p-3 text-center">Lab / Sandbox</th>
-                      <th className="p-3 text-center">Total Clock</th>
-                      <th className="p-3">WIOA Learning Objective</th>
-                      <th className="p-3 text-center">Passing Std</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-800 print:divide-neutral-200 text-slate-300 print:text-black">
-                    {VAAI_CURRICULUM_MATRIX.map((m) => (
-                      <tr key={m.moduleNumber}>
-                        <td className="p-3 font-mono text-amber-400 print:text-black font-bold">Mod {m.moduleNumber}</td>
-                        <td className="p-3 font-semibold text-white print:text-black">{m.title}</td>
-                        <td className="p-3 text-center font-mono">{m.lectureHours.toFixed(1)}h</td>
-                        <td className="p-3 text-center font-mono">{m.labHours.toFixed(1)}h</td>
-                        <td className="p-3 text-center font-mono font-bold text-amber-400 print:text-black">
-                          {m.totalHours.toFixed(1)}h
-                        </td>
-                        <td className="p-3 text-slate-400 print:text-black">{m.wioaObjective}</td>
-                        <td className="p-3 text-center">
-                          <Badge variant="outline" className="border-emerald-500/40 text-emerald-400 print:border-black print:text-black font-mono">
-                            &ge; {m.rubricPassingScore}%
-                          </Badge>
-                        </td>
-                      </tr>
+              {/* 10-Program Regulatory Table Component */}
+              <CourseProgramTable
+                courses={INSTITUTIONAL_COURSES}
+                selectedCourseId={selectedCourseId}
+                onSelectCourse={(id) => setSelectedCourseId(id)}
+                interactive={true}
+              />
+
+              {/* Interactive Course Module & Capstone Auditor for Adjudicators */}
+              <div className="mt-8 rounded-xl border border-amber-500/30 bg-slate-900/80 p-5 print:border-black print:bg-white">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800 print:border-black pb-3">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <Badge className="bg-amber-500 text-slate-950 font-mono font-bold text-xs">
+                        {selectedCourse.id}
+                      </Badge>
+                      <h3 className="text-sm sm:text-base font-bold text-white print:text-black">
+                        {selectedCourse.title}
+                      </h3>
+                    </div>
+                    <div className="text-xs font-mono text-slate-400 print:text-slate-700 mt-0.5">
+                      Program Code: {getTwcProgramCode(selectedCourse.id)} • Level {selectedCourse.level} • {selectedCourse.track.toUpperCase()} TRACK • O*NET SOC: {selectedCourse.socCode}
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <Badge variant="outline" className="border-emerald-500/40 text-emerald-400 font-mono text-xs">
+                      {selectedCourse.clockHours} Clock Hours ({selectedCourse.ceuValue.toFixed(1)} CEU)
+                    </Badge>
+                    <Badge variant="outline" className="border-amber-500/40 text-amber-400 font-mono text-xs">
+                      ITA Voucher: ${selectedCourse.pricing.etplVoucherPrice.toLocaleString()}
+                    </Badge>
+                  </div>
+                </div>
+
+                {/* Course Quick Selector Pills */}
+                <div className="py-3 flex flex-wrap items-center gap-1.5 border-b border-slate-800/80 print:hidden text-xs">
+                  <span className="text-slate-400 font-medium text-[11px] mr-1">Audit Program:</span>
+                  {INSTITUTIONAL_COURSES.map((c) => (
+                    <button
+                      key={c.id}
+                      type="button"
+                      onClick={() => setSelectedCourseId(c.id)}
+                      className={`px-2 py-0.5 rounded font-mono text-[11px] transition-colors ${
+                        selectedCourseId === c.id
+                          ? 'bg-amber-500 text-slate-950 font-bold'
+                          : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+                      }`}
+                    >
+                      {c.id}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Course Narrative Description */}
+                <p className="py-3 text-xs text-slate-300 print:text-black leading-relaxed">
+                  {selectedCourse.description}
+                </p>
+
+                {/* Target Military MOS Crosswalk */}
+                <div className="mb-4 rounded bg-slate-950/70 p-3 border border-slate-800/80 print:border-slate-300 print:bg-slate-50">
+                  <div className="text-[11px] font-semibold text-amber-400 print:text-black mb-1">
+                    Target Military MOS / Rating Crosswalk:
+                  </div>
+                  <div className="flex flex-wrap gap-2 text-xs">
+                    {selectedCourse.targetMos.map((mos, idx) => (
+                      <Badge key={idx} variant="outline" className="border-slate-700 bg-slate-900 text-slate-300 text-[10px] print:border-black print:text-black">
+                        {mos}
+                      </Badge>
                     ))}
-                    <tr className="bg-slate-900/80 print:bg-neutral-100 font-bold border-t-2 border-slate-700 print:border-black text-white print:text-black">
-                      <td colSpan={2} className="p-3 uppercase tracking-wider">
-                        Program Totals
-                      </td>
-                      <td className="p-3 text-center font-mono">{totalLectureHours.toFixed(1)}h</td>
-                      <td className="p-3 text-center font-mono">{totalLabHours.toFixed(1)}h</td>
-                      <td className="p-3 text-center font-mono text-amber-400 print:text-black">
-                        {totalClockHours.toFixed(1)}h
-                      </td>
-                      <td colSpan={2} className="p-3 text-slate-400 print:text-black font-normal">
-                        Satisfies WIOA accelerated credential requirements
-                      </td>
-                    </tr>
-                  </tbody>
-                </table>
+                  </div>
+                </div>
+
+                {/* 4-Module Breakdown Table */}
+                <div className="space-y-3">
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-slate-300 print:text-black flex items-center gap-1.5">
+                    <BookOpen className="h-3.5 w-3.5 text-amber-400" />
+                    4-Module Contact Hour Breakdown &amp; Terminal Learning Objectives
+                  </h4>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {selectedCourse.modules.map((mod) => (
+                      <div
+                        key={mod.id}
+                        className="rounded-lg border border-slate-800 bg-slate-950/40 p-3.5 print:border-slate-300 print:bg-white"
+                      >
+                        <div className="flex items-center justify-between mb-1.5">
+                          <span className="font-mono text-xs font-bold text-amber-400 print:text-black">
+                            Module {mod.moduleNumber} ({mod.contactHours}h)
+                          </span>
+                          <Badge variant="outline" className="border-emerald-500/30 text-emerald-400 text-[10px] font-mono">
+                            {mod.exercises.length} Interactive Lab{mod.exercises.length > 1 ? 's' : ''}
+                          </Badge>
+                        </div>
+                        <div className="text-xs font-semibold text-white print:text-black mb-2">
+                          {mod.title}
+                        </div>
+                        <ul className="list-disc pl-4 space-y-1 text-[11px] text-slate-400 print:text-slate-700">
+                          {mod.learningObjectives.map((obj, i) => (
+                            <li key={i}>{obj}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Capstone Practical Examination */}
+                <div className="mt-5 rounded-lg border border-slate-800 bg-slate-950/60 p-4 print:border-black print:bg-white">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-2 pb-2 border-b border-slate-800 print:border-black">
+                    <div>
+                      <div className="text-[10px] font-mono uppercase tracking-wider text-amber-400 print:text-black font-semibold">
+                        Terminal Practical Examination
+                      </div>
+                      <h4 className="text-sm font-bold text-white print:text-black">
+                        Capstone: {selectedCourse.capstone.title}
+                      </h4>
+                    </div>
+                    <Badge variant="outline" className="border-emerald-500/40 text-emerald-400 font-mono text-xs w-fit">
+                      Passing Standard: &ge; 80.0%
+                    </Badge>
+                  </div>
+
+                  <p className="text-xs text-slate-300 print:text-slate-700 leading-relaxed mb-3">
+                    {selectedCourse.capstone.briefing}
+                  </p>
+
+                  <div className="text-xs font-semibold text-slate-200 print:text-black mb-2">
+                    Objective Rubric Evaluation Criteria:
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs mb-3">
+                    {selectedCourse.capstone.rubric.map((crit, i) => (
+                      <div key={i} className="rounded border border-slate-800/80 bg-slate-900/60 p-2.5 print:border-slate-300 print:bg-white">
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="font-semibold text-amber-400 print:text-black text-[11px]">{crit.name}</span>
+                          <span className="font-mono text-[10px] text-emerald-400 print:text-black font-bold">{crit.weight}%</span>
+                        </div>
+                        <p className="text-[10px] text-slate-400 print:text-slate-600 leading-normal">
+                          {crit.description}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Starter Code Preview */}
+                  <div className="mt-3">
+                    <div className="flex items-center justify-between text-[11px] font-mono text-slate-400 mb-1">
+                      <span className="flex items-center gap-1.5">
+                        <Terminal className="h-3 w-3 text-amber-400" />
+                        In-Browser WASM Execution Harness ({selectedCourse.capstone.language})
+                      </span>
+                      <span className="text-[10px] text-emerald-400">Zero Server-Side Egress</span>
+                    </div>
+                    <pre className="overflow-x-auto rounded bg-slate-950 p-3 font-mono text-[11px] text-slate-300 border border-slate-800 print:border-slate-400 print:bg-slate-50 print:text-black max-h-36">
+                      <code>{selectedCourse.capstone.starterCode.slice(0, 450)}...</code>
+                    </pre>
+                  </div>
+                </div>
               </div>
             </section>
 
@@ -546,48 +791,76 @@ export default function EtplDossierPage() {
                       <th className="p-3">Classification Type</th>
                       <th className="p-3">Code</th>
                       <th className="p-3">Program / Occupation Title</th>
+                      <th className="p-3">Curriculum Track</th>
                       <th className="p-3">Projected Texas Growth</th>
-                      <th className="p-3">Median Wage</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-800 print:divide-neutral-200 text-slate-300 print:text-black">
-                    {VAAI_SOC_CIP_CROSSWALK.cipCodes.map((cip) => (
-                      <tr key={cip.code}>
-                        <td className="p-3 font-mono text-amber-400 print:text-black font-semibold">CIP (Curriculum)</td>
-                        <td className="p-3 font-mono">{cip.code}</td>
-                        <td className="p-3 font-medium">{cip.title}</td>
-                        <td className="p-3 text-slate-400 print:text-black">State-Approved STEM</td>
-                        <td className="p-3 text-slate-400 print:text-black">—</td>
-                      </tr>
-                    ))}
-                    {VAAI_SOC_CIP_CROSSWALK.socCodes.map((soc) => (
-                      <tr key={soc.code}>
-                        <td className="p-3 font-mono text-emerald-400 print:text-black font-semibold">SOC (Workforce)</td>
-                        <td className="p-3 font-mono">{soc.code}</td>
-                        <td className="p-3 font-medium">{soc.title}</td>
-                        <td className="p-3 text-emerald-400 print:text-black font-semibold">{soc.projectedGrowthTexas}</td>
-                        <td className="p-3 font-semibold">{soc.medianWageTexas}</td>
-                      </tr>
-                    ))}
+                  <tbody className="divide-y divide-slate-800 print:divide-neutral-200 text-slate-300 print:text-black font-mono">
+                    <tr>
+                      <td className="p-3 text-amber-400 print:text-black font-semibold">CIP</td>
+                      <td className="p-3">11.0102</td>
+                      <td className="p-3 font-sans font-medium text-white print:text-black">Artificial Intelligence and Robotics</td>
+                      <td className="p-3 font-sans text-sky-400">Engineering Track</td>
+                      <td className="p-3 font-sans text-emerald-400">+28.4% (High Demand)</td>
+                    </tr>
+                    <tr>
+                      <td className="p-3 text-amber-400 print:text-black font-semibold">CIP</td>
+                      <td className="p-3">11.0103</td>
+                      <td className="p-3 font-sans font-medium text-white print:text-black">Information Technology</td>
+                      <td className="p-3 font-sans text-sky-400">Engineering &amp; Ops</td>
+                      <td className="p-3 font-sans text-emerald-400">+19.2% (High Demand)</td>
+                    </tr>
+                    <tr>
+                      <td className="p-3 text-amber-400 print:text-black font-semibold">CIP</td>
+                      <td className="p-3">11.1003</td>
+                      <td className="p-3 font-sans font-medium text-white print:text-black">Computer &amp; Information Systems Security</td>
+                      <td className="p-3 font-sans text-emerald-400">Security Track</td>
+                      <td className="p-3 font-sans text-emerald-400">+31.5% (Critical Shortage)</td>
+                    </tr>
+                    <tr>
+                      <td className="p-3 text-emerald-400 print:text-black font-semibold">SOC</td>
+                      <td className="p-3 font-bold">15-1299.08</td>
+                      <td className="p-3 font-sans font-medium text-white print:text-black">Computer Systems Engineers (AI Specialists)</td>
+                      <td className="p-3 font-sans text-slate-300">VAAI-101, VAAI-203</td>
+                      <td className="p-3 font-sans text-emerald-400">+28.4% (Median: $106,420/yr)</td>
+                    </tr>
+                    <tr>
+                      <td className="p-3 text-emerald-400 print:text-black font-semibold">SOC</td>
+                      <td className="p-3 font-bold">15-1252.00</td>
+                      <td className="p-3 font-sans font-medium text-white print:text-black">Software Developers (Agentic &amp; ISR AI)</td>
+                      <td className="p-3 font-sans text-slate-300">VAAI-201, VAAI-302</td>
+                      <td className="p-3 font-sans text-emerald-400">+25.7% (Median: $118,500/yr)</td>
+                    </tr>
+                    <tr>
+                      <td className="p-3 text-emerald-400 print:text-black font-semibold">SOC</td>
+                      <td className="p-3 font-bold">15-1212.00</td>
+                      <td className="p-3 font-sans font-medium text-white print:text-black">Information Security Analysts (Cyber Defense)</td>
+                      <td className="p-3 font-sans text-slate-300">VAAI-202, VAAI-401, VAAI-402</td>
+                      <td className="p-3 font-sans text-emerald-400">+31.5% (Median: $112,000/yr)</td>
+                    </tr>
+                    <tr>
+                      <td className="p-3 text-emerald-400 print:text-black font-semibold">SOC</td>
+                      <td className="p-3 font-bold">15-2051.01</td>
+                      <td className="p-3 font-sans font-medium text-white print:text-black">Data Scientists (Model Adaptation &amp; Fine-Tuning)</td>
+                      <td className="p-3 font-sans text-slate-300">VAAI-301</td>
+                      <td className="p-3 font-sans text-emerald-400">+35.2% (Median: $103,500/yr)</td>
+                    </tr>
+                    <tr>
+                      <td className="p-3 text-emerald-400 print:text-black font-semibold">SOC</td>
+                      <td className="p-3 font-bold">11-1021.00</td>
+                      <td className="p-3 font-sans font-medium text-white print:text-black">General &amp; Operations Managers (GovCloud &amp; CUI)</td>
+                      <td className="p-3 font-sans text-slate-300">VAAI-303</td>
+                      <td className="p-3 font-sans text-emerald-400">+12.4% (Median: $98,400/yr)</td>
+                    </tr>
+                    <tr>
+                      <td className="p-3 text-emerald-400 print:text-black font-semibold">SOC</td>
+                      <td className="p-3 font-bold">13-1020.00</td>
+                      <td className="p-3 font-sans font-medium text-white print:text-black">Buyers &amp; Purchasing Agents (GovCon AI Capture)</td>
+                      <td className="p-3 font-sans text-slate-300">VAAI-403</td>
+                      <td className="p-3 font-sans text-emerald-400">+14.8% (Median: $84,200/yr)</td>
+                    </tr>
                   </tbody>
                 </table>
-              </div>
-
-              <div className="rounded-lg border border-slate-800 print:border-black bg-slate-900/30 print:bg-white p-4">
-                <h3 className="text-sm font-semibold text-slate-200 print:text-black mb-2">O*NET Task Integration Matrix</h3>
-                <div className="space-y-2">
-                  {VAAI_SOC_CIP_CROSSWALK.onetTasks.map((t) => (
-                    <div key={t.taskId} className="flex flex-col sm:flex-row sm:items-center justify-between text-xs gap-1 border-b border-slate-800/60 pb-2">
-                      <div>
-                        <span className="font-mono text-amber-400 print:text-black font-bold mr-2">[{t.taskId}]</span>
-                        <span className="text-slate-300 print:text-black">{t.description}</span>
-                      </div>
-                      <Badge variant="outline" className="w-fit shrink-0 border-slate-700 text-slate-400 print:border-black print:text-black">
-                        {t.curriculumModule}
-                      </Badge>
-                    </div>
-                  ))}
-                </div>
               </div>
             </section>
 
@@ -616,7 +889,7 @@ export default function EtplDossierPage() {
                       <Badge className="bg-emerald-500/20 text-emerald-300 text-[10px]">Active MOU</Badge>
                     </div>
                     <p className="text-[11px] text-slate-400 print:text-slate-600 mb-2">
-                      Guaranteed interview pipeline for certified Applied AI Operators in defense analytics.
+                      Guaranteed interview pipeline for certified Applied AI Operators in defense analytics across all 10 programs.
                     </p>
                     <Link
                       href="/employers/partnership/MOU-2026-BAH-01"
@@ -660,12 +933,12 @@ export default function EtplDossierPage() {
                 </div>
 
                 <div className="mt-4 pt-3 border-t border-slate-800 flex justify-between items-center text-xs print:border-slate-300">
-                  <span className="text-slate-400">Want to inspect all corporate partnership records?</span>
+                  <span className="text-slate-400">Looking for B2B Defense Enterprise Training?</span>
                   <Link
-                    href="/employers/partnership"
+                    href="/employers/training-brochure"
                     className="text-emerald-400 hover:text-emerald-300 font-semibold flex items-center gap-1"
                   >
-                    Open Partnership MOUs Hub &rarr;
+                    View Defense Training Brochure ($12,500/seat) &rarr;
                   </Link>
                 </div>
               </div>
@@ -689,7 +962,7 @@ export default function EtplDossierPage() {
                     <h3 className="text-sm font-semibold text-white print:text-black">
                       NIST SP 800-171 Rev. 3 &amp; CMMC 2.0 Level 2 Attestation Package
                     </h3>
-                    <p className="text-xs text-slate-400 print:text-slate-600 mt-0.5">
+                    <p className="text-xs text-slate-400 print:text-slate-600 mt-0.5 font-mono">
                       Audit Reference: VAAI-SEC-2026-NIST-800-171-REV3-VSA | Target SPRS Score: 110/110
                     </p>
                   </div>
@@ -723,13 +996,18 @@ export default function EtplDossierPage() {
               </div>
             </section>
 
-            {/* EXHIBIT F: Performance Outcomes & WIOA PIRL Exporter */}
+            {/* EXHIBIT F: Performance Outcomes & Multi-Course WIOA PIRL Exporter */}
             <section id="exhibit-f" className="space-y-6 scroll-mt-20">
               <div className="border-b border-slate-800 pb-3 print:border-black flex items-center justify-between">
-                <h2 className="text-xl font-bold tracking-tight text-amber-400 print:text-black flex items-center">
-                  <Award className="mr-2 h-5 w-5" />
-                  Exhibit F: WIOA PIRL Compliance &amp; Cohort Performance Baselines
-                </h2>
+                <div>
+                  <h2 className="text-xl font-bold tracking-tight text-amber-400 print:text-black flex items-center">
+                    <Award className="mr-2 h-5 w-5" />
+                    Exhibit F: Multi-Course WIOA PIRL Compliance &amp; Cohort Performance Baselines
+                  </h2>
+                  <p className="text-xs text-slate-400 print:text-slate-600 mt-1">
+                    Verified participant completion records across all 10 programs in the state-accredited catalog.
+                  </p>
+                </div>
                 <Badge variant="outline" className="border-amber-500/40 text-amber-300 font-mono text-[10px]">
                   EXHIBIT F
                 </Badge>
@@ -765,19 +1043,19 @@ export default function EtplDossierPage() {
                   <div className="text-sm font-bold text-purple-400 print:text-black font-mono mt-1">
                     OpenBadges v3.0
                   </div>
-                  <div className="text-[10px] text-slate-500 print:text-black">Ed25519 Signed Vector SVG</div>
+                  <div className="text-[10px] text-slate-500 print:text-black">Ed25519 Signed Assertions</div>
                 </div>
               </div>
 
-              {/* Sample PIRL Table */}
+              {/* Multi-Course Sample PIRL Table */}
               <div className="rounded-lg border border-slate-800 print:border-black bg-slate-900/30 print:bg-white p-4">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 gap-2">
                   <div>
                     <h3 className="text-sm font-semibold text-slate-200 print:text-black">
-                      State Audit Cohort Sampling (PIRL Participant Records)
+                      State Audit Cohort Sampling (10 Programs Represented)
                     </h3>
                     <p className="text-xs text-slate-400 print:text-neutral-700">
-                      Sample records extracted from immutable seat_time_logs and issued_credentials
+                      Sample records extracted from immutable seat_time_logs, verified &ge;90% telemetry floors, and issued credentials
                     </p>
                   </div>
                   <Button
@@ -796,9 +1074,10 @@ export default function EtplDossierPage() {
                     <thead className="border-b border-slate-800 print:border-black text-slate-400 print:text-black font-semibold">
                       <tr>
                         <th className="pb-2">Participant ID</th>
-                        <th className="pb-2">Branch</th>
-                        <th className="pb-2">Verified Hours</th>
-                        <th className="pb-2">Capstone</th>
+                        <th className="pb-2">Branch / MOS</th>
+                        <th className="pb-2">Target SOC</th>
+                        <th className="pb-2 text-center">Verified Hours</th>
+                        <th className="pb-2 text-center">Capstone</th>
                         <th className="pb-2">Credential UUID</th>
                         <th className="pb-2">Quarter 2 Employer</th>
                       </tr>
@@ -807,10 +1086,22 @@ export default function EtplDossierPage() {
                       {SAMPLE_PIRL_COHORT.map((r) => (
                         <tr key={r.pirl100_participantId}>
                           <td className="py-2 text-amber-400 print:text-black font-bold">{r.pirl100_participantId}</td>
-                          <td className="py-2 font-sans">{r.pirl401_militaryServiceBranch}</td>
-                          <td className="py-2 text-emerald-400 print:text-black font-bold">{r.pirl1300_verifiedContactHours}h</td>
-                          <td className="py-2 text-sky-400 print:text-black font-bold">{r.pirl1301_capstoneScore}%</td>
-                          <td className="py-2 text-slate-400 print:text-black">{r.pirl1205_credentialUuid}</td>
+                          <td className="py-2 font-sans">
+                            {r.pirl401_militaryServiceBranch}
+                            {r.pirl403_militaryMos && (
+                              <span className="text-[10px] text-slate-400 block font-mono">
+                                {r.pirl403_militaryMos}
+                              </span>
+                            )}
+                          </td>
+                          <td className="py-2 text-emerald-400 print:text-black">{r.pirl1405_occupationSocCode}</td>
+                          <td className="py-2 text-center text-emerald-400 print:text-black font-bold">
+                            {r.pirl1300_verifiedContactHours}h
+                          </td>
+                          <td className="py-2 text-center text-sky-400 print:text-black font-bold">
+                            {r.pirl1301_capstoneScore}%
+                          </td>
+                          <td className="py-2 text-slate-400 print:text-black text-[10px]">{r.pirl1205_credentialUuid}</td>
                           <td className="py-2 font-sans text-slate-200 print:text-black">{r.pirl1404_employerName}</td>
                         </tr>
                       ))}
@@ -824,8 +1115,8 @@ export default function EtplDossierPage() {
             <section className="mt-12 border-t border-slate-800 print:border-black pt-8">
               <div className="text-xs text-slate-400 print:text-neutral-700 leading-relaxed">
                 <span className="font-semibold text-slate-200 print:text-black">Institutional Attestation:</span> I hereby
-                certify under penalty of perjury that the curriculum, attendance telemetry standards, and performance
-                outcomes presented in this dossier are true, accurate, and maintained in compliance with the Texas Workforce
+                certify under penalty of perjury that the 10 accredited programs, 425.0 cumulative clock hours, attendance telemetry standards,
+                and performance outcomes presented in this dossier are true, accurate, and maintained in compliance with the Texas Workforce
                 Commission Career Schools and Colleges rules (40 TAC Chapter 807) and WIOA Title I regulations (20 CFR Part 680).
               </div>
 
