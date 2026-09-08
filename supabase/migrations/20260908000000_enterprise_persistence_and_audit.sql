@@ -224,7 +224,7 @@ CREATE POLICY "Allow service role and auditors to read audit events"
     USING (
         (auth.jwt() ->> 'role' = 'service_role') OR
         (auth.jwt() ->> 'role' = 'auditor') OR
-        (auth.jwt() ->> 'app_metadata' ->> 'is_compliance_officer' = 'true')
+        ((auth.jwt() -> 'app_metadata' ->> 'is_compliance_officer') = 'true')
     );
 
 DROP POLICY IF EXISTS "Allow service role and system services to insert audit events" ON public.audit_events;
