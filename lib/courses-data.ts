@@ -799,50 +799,198 @@ def redact_edipi(prompt: str) -> str:
     description:
       'Tactical & SCIF Infrastructure Engineering. Master quantization mechanics (GGUF, AWQ, EXL2), deploy local inference engines (Ollama, vLLM, llama.cpp) on ruggedized edge hardware (NVIDIA Jetson, laptops), and build air-gapped containerized offline embedding pipelines.',
     capstone: {
-      title: 'Air-Gapped Tactical Field Assistant',
+      title: 'Air-Gapped Tactical Deployable Inference Engine',
       briefing:
-        'Deploy a self-contained, air-gapped tactical field assistant inside a single container running a quantized 8B parameter model. The system must execute offline semantic search, parse maintenance field records, and monitor VRAM resource bounds under simulated disconnected conditions.',
+        'Engineer and benchmark a fully offline, air-gapped containerized inference engine on simulated tactical hardware (NVIDIA Jetson Orin / Ruggedized Laptop). The pipeline must enforce strict 127.0.0.1 loopback isolation, mathematically budget VRAM static and dynamic KV-cache footprint with >= 5% headroom, verify GGUF binary checksums before GPU allocation, maintain >= 12.0 tok/s local inference throughput, and execute sub-500ms failover to a fallback micro-model during thermal or memory saturation.',
       rubric: [
         {
-          name: 'GGUF Quantization & VRAM Budgeting',
-          weight: 35,
-          description:
-            'Selects optimal quantization schemes (Q4_K_M vs Q8_0) balancing latency against perplexity.',
-        },
-        {
-          name: 'Air-Gapped Container Isolation',
-          weight: 35,
-          description:
-            'Demonstrates complete offline functionality with zero external DNS or internet dependencies.',
-        },
-        {
-          name: 'Tactical Edge Failover',
+          name: 'Zero-Egress Air-Gap Compliance & Socket Isolation',
           weight: 30,
           description:
-            'Gracefully queues requests during simulated RF network dropouts without memory corruption.',
+            'Sockets bind strictly to 127.0.0.1 loopback; egress probes to external IP/DNS targets fail closed under container --network none isolation (NIST SP 800-171 SC-7 / CNSSI 1253).',
+        },
+        {
+          name: 'Quantization & VRAM Budgeting (SWaP-C)',
+          weight: 25,
+          description:
+            'Static weight footprint and dynamic KV-cache scaling fit strictly within physical VRAM with >= 5% safety margin; GGUF binary structure and SHA-256 supply-chain hash verified (MIL-STD-810H / NIST SC-13).',
+        },
+        {
+          name: 'Local Inference Throughput & Latency',
+          weight: 25,
+          description:
+            'Sustained offline generation throughput >= 12.0 tokens/second; Time-to-First-Token (TTFT) <= 350ms across tactical prompt benchmarks in local runtime.',
+        },
+        {
+          name: 'Host Fault Recovery & Degradation Resilience',
+          weight: 20,
+          description:
+            'Asynchronous watchdog detects simulated OOM/thermal faults and executes automated downshift to fallback micro-model within <= 500ms without process crash (CJCSM 6510.01B).',
         },
       ],
-      starterCode: `# VAAI-203 Capstone: Air-Gapped Tactical Field Assistant
-class TacticalFieldAssistant:
-    def __init__(self, max_vram_mb: int = 4096):
-        self.max_vram = max_vram_mb
-        self.is_air_gapped = True
-        self.request_queue = []
+      starterCode: `# VAAI-203 Capstone: Air-Gapped Tactical Deployable Edge Inference Pipeline
+# Compliance: MIL-STD-810H, NIST SP 800-171 SC-7/SC-13, CNSSI 1253, CJCSM 6510.01B
+# Hardware Baseline: NVIDIA Jetson Orin / Ruggedized Edge Accelerator (SWaP-C)
 
-    def execute_query(self, query: str, required_vram: int) -> dict:
-        if required_vram > self.max_vram:
-            return {"status": "FAILED", "reason": "EXCEEDS_VRAM_BUDGET"}
-        
-        self.request_queue.append(query)
+import socket
+import struct
+import hashlib
+import time
+import asyncio
+from dataclasses import dataclass
+from typing import Dict, Any, List, Optional, Callable
+
+# =====================================================================
+# 1. Zero-Egress Air-Gap Compliance Auditor (NIST SP 800-171 SC-7)
+# =====================================================================
+class AirGapEgressAuditor:
+    @staticmethod
+    def audit_socket_binding(host: str, port: int) -> Dict[str, Any]:
+        is_loopback = host in {"127.0.0.1", "localhost", "::1"}
+        if not is_loopback:
+            return {
+                "compliant": False,
+                "violation": f"Insecure external interface binding: {host}:{port}. Bound strictly to 127.0.0.1."
+            }
+        return {"compliant": True, "host": host, "port": port}
+
+    @staticmethod
+    def assert_zero_outbound_egress(destinations=None) -> Dict[str, Any]:
+        if destinations is None:
+            destinations = [("8.8.8.8", 53), ("1.1.1.1", 53)]
+        leaks = []
+        for dest_host, dest_port in destinations:
+            try:
+                sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                sock.settimeout(0.1)
+                sock.connect((dest_host, dest_port))
+                sock.close()
+                leaks.append(f"{dest_host}:{dest_port}")
+            except (socket.timeout, socket.error, OSError):
+                pass  # Connection refusal is the mandatory air-gapped behavior
         return {
-            "status": "PROCESSED_OFFLINE",
-            "model": "Llama-3-8B-Instruct-Q4_K_M.gguf",
-            "vram_used_mb": required_vram,
-            "air_gap_verified": self.is_air_gapped
+            "air_gap_intact": len(leaks) == 0,
+            "detected_leaks": leaks,
+            "status": "PASS_ZERO_EGRESS" if len(leaks) == 0 else "FAIL_LEAK_DETECTED"
         }
 
-assistant = TacticalFieldAssistant(max_vram_mb=8192)
-print(assistant.execute_query("Decode field maintenance error code E-401", 2048))
+# =====================================================================
+# 2. GGUF Binary Integrity & Cryptographic Verifier (NIST SC-13)
+# =====================================================================
+GGUF_MAGIC = b"GGUF"
+
+class GGUFIntegrityInspector:
+    @staticmethod
+    def verify_and_inspect_header(raw_bytes: bytes, expected_sha256: str) -> Dict[str, Any]:
+        computed_sha = hashlib.sha256(raw_bytes).hexdigest()
+        if computed_sha.lower() != expected_sha256.lower():
+            return {"verified": False, "error": "SHA-256 integrity mismatch."}
+        if len(raw_bytes) < 24:
+            return {"verified": False, "error": "Insufficient header length."}
+        if raw_bytes[:4] != GGUF_MAGIC:
+            return {"verified": False, "error": "Invalid GGUF magic."}
+        version, tensor_count, metadata_kv_count = struct.unpack("<IQQ", raw_bytes[4:24])
+        return {
+            "verified": True,
+            "version": version,
+            "tensor_count": tensor_count,
+            "metadata_kv_count": metadata_kv_count,
+            "sha256": computed_sha
+        }
+
+# =====================================================================
+# 3. SWaP-C VRAM Budgeter & KV Cache Guard (MIL-STD-810H)
+# =====================================================================
+@dataclass
+class EdgeHardwareProfile:
+    name: str
+    total_vram_gb: float
+    bandwidth_gb_s: float
+    max_tdp_watts: int
+
+@dataclass
+class ModelDeploymentSpec:
+    param_billions: float
+    quant_bits_per_param: float
+    context_tokens: int
+    num_layers: int
+    num_heads: int
+    head_dim: int
+    bytes_per_cache_element: int = 2
+
+class EdgeVRAMBudgeter:
+    def __init__(self, hardware: EdgeHardwareProfile):
+        self.hw = hardware
+
+    def calculate_footprint(self, model: ModelDeploymentSpec) -> Dict[str, Any]:
+        weights_gb = (model.param_billions * 1e9 * (model.quant_bits_per_param / 8.0)) / (1024**3)
+        kv_cache_bytes = 2 * model.num_layers * model.num_heads * model.head_dim * model.bytes_per_cache_element
+        kv_cache_gb = (kv_cache_bytes * model.context_tokens) / (1024**3)
+        runtime_overhead_gb = 1.2
+        total_required_gb = weights_gb + kv_cache_gb + runtime_overhead_gb
+        # 5% SWaP-C thermal/memory safety margin
+        fits_in_vram = total_required_gb <= (self.hw.total_vram_gb * 0.95)
+        headroom_gb = self.hw.total_vram_gb - total_required_gb
+        return {
+            "weights_vram_gb": round(weights_gb, 2),
+            "kv_cache_vram_gb": round(kv_cache_gb, 2),
+            "total_required_gb": round(total_required_gb, 2),
+            "available_vram_gb": self.hw.total_vram_gb,
+            "fits_in_vram": fits_in_vram,
+            "headroom_gb": round(headroom_gb, 2)
+        }
+
+# =====================================================================
+# 4. Host Fault Watchdog & Degraded Failover (CJCSM 6510.01B)
+# =====================================================================
+class EdgeWatchdogOrchestrator:
+    def __init__(self, failover_latency_cap_ms: float = 500.0, min_tps_threshold: float = 12.0):
+        self.latency_cap_ms = failover_latency_cap_ms
+        self.min_tps = min_tps_threshold
+        self.active_tier = "PRIMARY_TIER_14B"
+
+    async def execute_with_failover(self, primary_fn: Callable, fallback_fn: Callable, prompt: str) -> Dict[str, Any]:
+        start = time.perf_counter()
+        try:
+            result = await asyncio.wait_for(primary_fn(prompt), timeout=1.5)
+            elapsed_ms = (time.perf_counter() - start) * 1000
+            tokens_generated = 48
+            tps = round(tokens_generated / (elapsed_ms / 1000.0), 1)
+            return {
+                "status": "SUCCESS",
+                "tier_used": self.active_tier,
+                "latency_ms": round(elapsed_ms, 2),
+                "tokens_per_second": tps,
+                "output": result
+            }
+        except (asyncio.TimeoutError, MemoryError, RuntimeError) as err:
+            failover_start = time.perf_counter()
+            fallback_res = await fallback_fn(prompt)
+            failover_duration_ms = (time.perf_counter() - failover_start) * 1000
+            assert failover_duration_ms <= self.latency_cap_ms, f"Failover exceeded budget: {failover_duration_ms}ms"
+            self.active_tier = "FALLBACK_TIER_3B"
+            return {
+                "status": "DEGRADED_FAILOVER",
+                "tier_used": self.active_tier,
+                "failover_duration_ms": round(failover_duration_ms, 2),
+                "output": fallback_res
+            }
+
+# Demonstration pipeline run
+async def run_pipeline():
+    auditor = AirGapEgressAuditor()
+    bind_res = auditor.audit_socket_binding("127.0.0.1", 8080)
+    egress_res = auditor.assert_zero_outbound_egress()
+    
+    jetson = EdgeHardwareProfile("Jetson-Orin-16GB", 16.0, 204.8, 50)
+    budgeter = EdgeVRAMBudgeter(jetson)
+    spec = ModelDeploymentSpec(8.0, 4.5, 4096, 32, 32, 128)
+    footprint = budgeter.calculate_footprint(spec)
+    
+    watchdog = EdgeWatchdogOrchestrator(failover_latency_cap_ms=500.0)
+    print(f"Air-Gap Status: {egress_res['status']} | VRAM Headroom: {footprint['headroom_gb']}GB")
+
+asyncio.run(run_pipeline())
 `,
       language: 'python',
     },
@@ -850,22 +998,60 @@ print(assistant.execute_query("Decode field maintenance error code E-401", 2048)
       {
         id: 'mod-203-1',
         moduleNumber: 1,
-        title: 'Module 1: Quantization Mechanics: GGUF, AWQ, EXL2 & INT4 Trade-Offs',
+        title: 'Module 1: Tactical SWaP-C Profiling & VRAM Mathematical Budgeting (MIL-STD-810H)',
         contactHours: 10,
         learningObjectives: [
-          'Understand post-training quantization mathematics (INT8, INT4, NF4)',
-          'Evaluate precision vs. perplexity trade-offs across GGUF quantization levels',
-          'Convert Hugging Face checkpoints to GGUF using llama.cpp tooling',
+          'Calculate static model weight memory footprint and dynamic KV-cache expansion under SWaP-C constraints',
+          'Enforce strict 5% safety margin against accelerator VRAM ceiling to avoid OOM faults',
+          'Evaluate INT8, INT4, and NF4 quantization precision vs. perplexity trade-offs on ruggedized hardware',
         ],
         exercises: [
           {
             id: 'ex-203-1-1',
-            title: 'VRAM Calculation Function',
+            title: 'Tactical Edge VRAM Budgeter',
             instructions:
-              'Calculate the estimated RAM footprint of an N-billion parameter model at 4-bit precision.',
-            starterCode: `def estimate_vram_gb(params_billions: float, bits_per_param: int = 4) -> float:
-    raw_gb = (params_billions * bits_per_param) / 8
-    return round(raw_gb * 1.2, 2)
+              'Compute static weight memory, dynamic KV-cache scaling, and verify deployability with >= 5% headroom.',
+            starterCode: `from dataclasses import dataclass
+from typing import Dict, Any
+
+@dataclass
+class EdgeHardwareProfile:
+    name: str
+    total_vram_gb: float
+    bandwidth_gb_s: float
+    max_tdp_watts: int
+
+@dataclass
+class ModelDeploymentSpec:
+    param_billions: float
+    quant_bits_per_param: float
+    context_tokens: int
+    num_layers: int
+    num_heads: int
+    head_dim: int
+    bytes_per_cache_element: int = 2
+
+class EdgeVRAMBudgeter:
+    def __init__(self, hardware: EdgeHardwareProfile):
+        self.hw = hardware
+
+    def calculate_footprint(self, model: ModelDeploymentSpec) -> Dict[str, Any]:
+        weights_gb = (model.param_billions * 1e9 * (model.quant_bits_per_param / 8.0)) / (1024**3)
+        kv_cache_bytes_per_token = 2 * model.num_layers * model.num_heads * model.head_dim * model.bytes_per_cache_element
+        total_kv_gb = (kv_cache_bytes_per_token * model.context_tokens) / (1024**3)
+        runtime_overhead_gb = 1.2
+        total_required_gb = weights_gb + total_kv_gb + runtime_overhead_gb
+        
+        fits_in_vram = total_required_gb <= (self.hw.total_vram_gb * 0.95)
+        return {
+            "weights_vram_gb": round(weights_gb, 2),
+            "kv_cache_vram_gb": round(total_kv_gb, 2),
+            "runtime_overhead_gb": runtime_overhead_gb,
+            "total_required_gb": round(total_required_gb, 2),
+            "available_vram_gb": self.hw.total_vram_gb,
+            "deployable": fits_in_vram,
+            "headroom_gb": round(self.hw.total_vram_gb - total_required_gb, 2)
+        }
 `,
             language: 'python',
           },
@@ -874,21 +1060,56 @@ print(assistant.execute_query("Decode field maintenance error code E-401", 2048)
       {
         id: 'mod-203-2',
         moduleNumber: 2,
-        title: 'Module 2: Local Inference Engines: Ollama, vLLM & llama.cpp on Edge Hardware',
+        title: 'Module 2: GGUF Header Structure & Cryptographic Enclave Verification (NIST SP 800-171 SC-13)',
         contactHours: 10,
         learningObjectives: [
-          'Deploy high-throughput inference daemons on ruggedized tactical hardware',
-          'Configure Modelfiles with tailored system prompts and stop tokens',
-          'Benchmark token generation speeds (tokens/second) across hardware targets',
+          'Parse GGUF container binary structure, magic bytes (0x46554747), and metadata header blocks',
+          'Enforce SHA-256 cryptographic supply-chain verification before loading weights into host accelerator buffers',
+          'Inspect tensor counts and key-value metadata to prevent arbitrary memory corruption',
         ],
         exercises: [
           {
             id: 'ex-203-2-1',
-            title: 'Modelfile Builder',
+            title: 'GGUF Header & Cryptographic Verifier',
             instructions:
-              'Construct an automated Ollama Modelfile with defense parameters.',
-            starterCode: `def create_modelfile(model_path: str, temp: float = 0.2) -> str:
-    return f"FROM {model_path}\\nPARAMETER temperature {temp}\\nSYSTEM \\"Tactical Edge Operator\\""
+              'Verify GGUF binary magic bytes, unpack version and tensor metadata, and validate SHA-256 hash.',
+            starterCode: `import struct
+import hashlib
+from typing import Dict, Any
+
+GGUF_MAGIC = b"GGUF"
+VALID_VERSIONS = {2, 3}
+
+class GGUFIntegrityInspector:
+    @staticmethod
+    def verify_and_inspect_header(raw_bytes: bytes, expected_sha256: str) -> Dict[str, Any]:
+        computed_sha = hashlib.sha256(raw_bytes).hexdigest()
+        if computed_sha.lower() != expected_sha256.lower():
+            return {
+                "verified": False,
+                "error": f"Cryptographic integrity mismatch. Expected: {expected_sha256}, Computed: {computed_sha}"
+            }
+
+        if len(raw_bytes) < 24:
+            return {"verified": False, "error": "Insufficient binary length for GGUF header."}
+
+        magic = raw_bytes[:4]
+        if magic != GGUF_MAGIC:
+            return {"verified": False, "error": f"Invalid GGUF magic identifier: {magic!r}"}
+
+        version, tensor_count, metadata_kv_count = struct.unpack("<IQQ", raw_bytes[4:24])
+
+        if version not in VALID_VERSIONS:
+            return {"verified": False, "error": f"Unsupported GGUF version: {version}"}
+
+        return {
+            "verified": True,
+            "version": version,
+            "tensor_count": tensor_count,
+            "metadata_kv_count": metadata_kv_count,
+            "sha256": computed_sha,
+            "status": "PASS_INTEGRITY_VERIFIED"
+        }
 `,
             language: 'python',
           },
@@ -897,21 +1118,54 @@ print(assistant.execute_query("Decode field maintenance error code E-401", 2048)
       {
         id: 'mod-203-3',
         moduleNumber: 3,
-        title: 'Module 3: Air-Gapped Containerization: Bundling Weights & Web UIs',
+        title: 'Module 3: Zero-Egress Network Isolation & Air-Gapped Gateway Auditing (NIST SP 800-171 SC-7)',
         contactHours: 10,
         learningObjectives: [
-          'Build self-contained Docker images containing weights, runtimes, and local web UIs',
-          'Verify zero outbound network connections using container network namespaces',
-          'Deploy lightweight in-browser small models via WebGPU and Transformers.js',
+          'Enforce strict loopback (127.0.0.1) and unix domain socket interface bindings across all local inference daemons',
+          'Deploy active egress probes against external DNS and IP destinations to verify fail-closed boundary isolation',
+          'Implement container network namespace isolation (--network none) preventing data exfiltration',
         ],
         exercises: [
           {
             id: 'ex-203-3-1',
-            title: 'Air-Gap Isolation Verifier',
+            title: 'Air-Gapped Egress & Socket Auditor',
             instructions:
-              'Verify that container configuration enforces internal network isolation.',
-            starterCode: `def is_network_isolated(docker_network: str) -> bool:
-    return docker_network.lower() in ["none", "internal", "isolated"]
+              'Audit daemon socket bindings and verify zero-egress connectivity across network boundary probes.',
+            starterCode: `import socket
+from typing import Dict, Any, List
+
+class AirGapEgressAuditor:
+    @staticmethod
+    def audit_socket_binding(host: str, port: int) -> Dict[str, Any]:
+        is_loopback = host in {"127.0.0.1", "localhost", "::1"}
+        if not is_loopback:
+            return {
+                "compliant": False,
+                "violation": f"Insecure binding on external interface {host}:{port}. Must bind exclusively to 127.0.0.1 or unix socket."
+            }
+        return {"compliant": True, "host": host, "port": port}
+
+    @staticmethod
+    def assert_zero_outbound_egress(test_destinations=None) -> Dict[str, Any]:
+        if test_destinations is None:
+            test_destinations = [("8.8.8.8", 53), ("1.1.1.1", 53), ("github.com", 443)]
+        
+        leaks = []
+        for dest_host, dest_port in test_destinations:
+            try:
+                sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                sock.settimeout(0.2)
+                sock.connect((dest_host, dest_port))
+                sock.close()
+                leaks.append(f"{dest_host}:{dest_port}")
+            except (socket.timeout, socket.error, OSError):
+                pass
+        
+        return {
+            "air_gap_intact": len(leaks) == 0,
+            "detected_leaks": leaks,
+            "status": "PASS_ZERO_EGRESS" if len(leaks) == 0 else "FAIL_LEAK_DETECTED"
+        }
 `,
             language: 'python',
           },
@@ -920,25 +1174,56 @@ print(assistant.execute_query("Decode field maintenance error code E-401", 2048)
       {
         id: 'mod-203-4',
         moduleNumber: 4,
-        title: 'Module 4: Offline Embedding Pipelines: Zero-Internet Semantic Search',
+        title: 'Module 4: Tiered Local Model Failover & Asynchronous Watchdog (CJCSM 6510.01B)',
         contactHours: 10,
         learningObjectives: [
-          'Execute zero-internet semantic search using local small-footprint models',
-          'Implement store-and-forward prompt caching for disconnected nodes',
-          'Synchronize edge embeddings once RF comms are restored',
+          'Construct asynchronous inference watchdogs tracking tokens-per-second (TPS) and process health',
+          'Execute sub-500ms automated failover from primary tier to local fallback micro-models during thermal or memory saturation',
+          'Maintain expeditionary mission capability without unhandled process termination or state loss',
         ],
         exercises: [
           {
             id: 'ex-203-4-1',
-            title: 'Store-and-Forward Queue',
+            title: 'Tiered Edge Failover Watchdog',
             instructions:
-              'Queue outgoing intelligence telemetry until radio link status transitions to active.',
-            starterCode: `def drain_queue(queue: list, link_active: bool) -> list:
-    if not link_active:
-        return []
-    synced = list(queue)
-    queue.clear()
-    return synced
+              'Implement an asynchronous watchdog downshifting from primary 14B to fallback 3B micro-model within <= 500ms.',
+            starterCode: `import asyncio
+import time
+from typing import Dict, Any, Callable
+
+class EdgeWatchdogOrchestrator:
+    def __init__(self, min_tps_threshold: float = 8.0, failover_latency_cap_ms: float = 500.0):
+        self.min_tps = min_tps_threshold
+        self.latency_cap_ms = failover_latency_cap_ms
+        self.active_tier = "PRIMARY_TIER_14B"
+
+    async def execute_with_failover(self, primary_engine: Callable, fallback_engine: Callable, prompt: str) -> Dict[str, Any]:
+        start = time.perf_counter()
+        try:
+            result = await asyncio.wait_for(primary_engine(prompt), timeout=1.5)
+            elapsed_ms = (time.perf_counter() - start) * 1000
+            return {
+                "status": "SUCCESS",
+                "tier_used": self.active_tier,
+                "elapsed_ms": round(elapsed_ms, 2),
+                "output": result
+            }
+        except (asyncio.TimeoutError, MemoryError, RuntimeError) as fault:
+            failover_start = time.perf_counter()
+            fallback_result = await fallback_engine(prompt)
+            failover_duration_ms = (time.perf_counter() - failover_start) * 1000
+            total_elapsed_ms = (time.perf_counter() - start) * 1000
+            
+            assert failover_duration_ms <= self.latency_cap_ms, f"Failover exceeded budget: {failover_duration_ms}ms"
+            self.active_tier = "FALLBACK_TIER_3B"
+            return {
+                "status": "DEGRADED_FAILOVER",
+                "tier_used": self.active_tier,
+                "failover_duration_ms": round(failover_duration_ms, 2),
+                "total_elapsed_ms": round(total_elapsed_ms, 2),
+                "fault_reason": str(fault) or "Timeout",
+                "output": fallback_result
+            }
 `,
             language: 'python',
           },

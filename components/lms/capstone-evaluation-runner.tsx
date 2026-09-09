@@ -23,8 +23,10 @@ import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { evaluateCapstoneSubmission } from '@/lib/capstone-evaluator';
 import { evaluateVAAI201CapstoneSubmission } from '@/lib/vaai-201-capstone-evaluator';
+import { evaluateVAAI203CapstoneSubmission } from '@/lib/vaai-203-capstone-evaluator';
 import { CAPSTONE_RUBRIC } from '@/lib/vaai-101-assessment-data';
 import { VAAI_201_CAPSTONE_RUBRIC } from '@/lib/vaai-201-assessment-data';
+import { VAAI_203_CAPSTONE_RUBRIC } from '@/lib/vaai-203-assessment-data';
 import type { CapstoneEvaluationResult } from '@/lib/types/assessment';
 
 const DEFAULT_VAAI_101_CODE = `# VAAI-101 Capstone: Multi-Stage Defense Briefing Generator
@@ -207,6 +209,171 @@ if gateway.intercept("KINETIC_AUTHORIZATION", state):
     print(f"Mission {state.mission_id} suspended in {state.phase.value} ({elapsed_ms:.2f}ms). Token: {state.pending_tokens[0]}")
 `;
 
+const DEFAULT_VAAI_203_CODE = `# VAAI-203 Capstone: Air-Gapped Tactical Deployable Edge Inference Pipeline
+# Compliance: MIL-STD-810H, NIST SP 800-171 SC-7/SC-13, CNSSI 1253, CJCSM 6510.01B
+# Hardware Baseline: NVIDIA Jetson Orin / Ruggedized Edge Accelerator (SWaP-C)
+
+import socket
+import struct
+import hashlib
+import time
+import asyncio
+from dataclasses import dataclass
+from typing import Dict, Any, List, Optional, Callable
+
+# =====================================================================
+# 1. Zero-Egress Air-Gap Compliance Auditor (NIST SP 800-171 SC-7)
+# =====================================================================
+class AirGapEgressAuditor:
+    @staticmethod
+    def audit_socket_binding(host: str, port: int) -> Dict[str, Any]:
+        is_loopback = host in {"127.0.0.1", "localhost", "::1"}
+        if not is_loopback:
+            return {
+                "compliant": False,
+                "violation": f"Insecure external interface binding: {host}:{port}. Bound strictly to 127.0.0.1."
+            }
+        return {"compliant": True, "host": host, "port": port}
+
+    @staticmethod
+    def assert_zero_outbound_egress(destinations=None) -> Dict[str, Any]:
+        if destinations is None:
+            destinations = [("8.8.8.8", 53), ("1.1.1.1", 53)]
+        leaks = []
+        for dest_host, dest_port in destinations:
+            try:
+                sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                sock.settimeout(0.1)
+                sock.connect((dest_host, dest_port))
+                sock.close()
+                leaks.append(f"{dest_host}:{dest_port}")
+            except (socket.timeout, socket.error, OSError):
+                pass  # Connection refusal is the mandatory air-gapped behavior
+        return {
+            "air_gap_intact": len(leaks) == 0,
+            "detected_leaks": leaks,
+            "status": "PASS_ZERO_EGRESS" if len(leaks) == 0 else "FAIL_LEAK_DETECTED"
+        }
+
+# =====================================================================
+# 2. GGUF Binary Integrity & Cryptographic Verifier (NIST SC-13)
+# =====================================================================
+GGUF_MAGIC = b"GGUF"
+
+class GGUFIntegrityInspector:
+    @staticmethod
+    def verify_and_inspect_header(raw_bytes: bytes, expected_sha256: str) -> Dict[str, Any]:
+        computed_sha = hashlib.sha256(raw_bytes).hexdigest()
+        if computed_sha.lower() != expected_sha256.lower():
+            return {"verified": False, "error": "SHA-256 integrity mismatch."}
+        if len(raw_bytes) < 24:
+            return {"verified": False, "error": "Insufficient header length."}
+        if raw_bytes[:4] != GGUF_MAGIC:
+            return {"verified": False, "error": "Invalid GGUF magic."}
+        version, tensor_count, metadata_kv_count = struct.unpack("<IQQ", raw_bytes[4:24])
+        return {
+            "verified": True,
+            "version": version,
+            "tensor_count": tensor_count,
+            "metadata_kv_count": metadata_kv_count,
+            "sha256": computed_sha
+        }
+
+# =====================================================================
+# 3. SWaP-C VRAM Budgeter & KV Cache Guard (MIL-STD-810H)
+# =====================================================================
+@dataclass
+class EdgeHardwareProfile:
+    name: str
+    total_vram_gb: float
+    bandwidth_gb_s: float
+    max_tdp_watts: int
+
+@dataclass
+class ModelDeploymentSpec:
+    param_billions: float
+    quant_bits_per_param: float
+    context_tokens: int
+    num_layers: int
+    num_heads: int
+    head_dim: int
+    bytes_per_cache_element: int = 2
+
+class EdgeVRAMBudgeter:
+    def __init__(self, hardware: EdgeHardwareProfile):
+        self.hw = hardware
+
+    def calculate_footprint(self, model: ModelDeploymentSpec) -> Dict[str, Any]:
+        weights_gb = (model.param_billions * 1e9 * (model.quant_bits_per_param / 8.0)) / (1024**3)
+        kv_cache_bytes = 2 * model.num_layers * model.num_heads * model.head_dim * model.bytes_per_cache_element
+        kv_cache_gb = (kv_cache_bytes * model.context_tokens) / (1024**3)
+        runtime_overhead_gb = 1.2
+        total_required_gb = weights_gb + kv_cache_gb + runtime_overhead_gb
+        # 5% SWaP-C thermal/memory safety margin
+        fits_in_vram = total_required_gb <= (self.hw.total_vram_gb * 0.95)
+        headroom_gb = self.hw.total_vram_gb - total_required_gb
+        return {
+            "weights_vram_gb": round(weights_gb, 2),
+            "kv_cache_vram_gb": round(kv_cache_gb, 2),
+            "total_required_gb": round(total_required_gb, 2),
+            "available_vram_gb": self.hw.total_vram_gb,
+            "fits_in_vram": fits_in_vram,
+            "headroom_gb": round(headroom_gb, 2)
+        }
+
+# =====================================================================
+# 4. Host Fault Watchdog & Degraded Failover (CJCSM 6510.01B)
+# =====================================================================
+class EdgeWatchdogOrchestrator:
+    def __init__(self, failover_latency_cap_ms: float = 500.0, min_tps_threshold: float = 12.0):
+        self.latency_cap_ms = failover_latency_cap_ms
+        self.min_tps = min_tps_threshold
+        self.active_tier = "PRIMARY_TIER_14B"
+
+    async def execute_with_failover(self, primary_fn: Callable, fallback_fn: Callable, prompt: str) -> Dict[str, Any]:
+        start = time.perf_counter()
+        try:
+            result = await asyncio.wait_for(primary_fn(prompt), timeout=1.5)
+            elapsed_ms = (time.perf_counter() - start) * 1000
+            tokens_generated = 48
+            tps = round(tokens_generated / (elapsed_ms / 1000.0), 1)
+            return {
+                "status": "SUCCESS",
+                "tier_used": self.active_tier,
+                "latency_ms": round(elapsed_ms, 2),
+                "tokens_per_second": tps,
+                "output": result
+            }
+        except (asyncio.TimeoutError, MemoryError, RuntimeError) as err:
+            failover_start = time.perf_counter()
+            fallback_res = await fallback_fn(prompt)
+            failover_duration_ms = (time.perf_counter() - failover_start) * 1000
+            assert failover_duration_ms <= self.latency_cap_ms, f"Failover exceeded budget: {failover_duration_ms}ms"
+            self.active_tier = "FALLBACK_TIER_3B"
+            return {
+                "status": "DEGRADED_FAILOVER",
+                "tier_used": self.active_tier,
+                "failover_duration_ms": round(failover_duration_ms, 2),
+                "output": fallback_res
+            }
+
+# Demonstration pipeline run
+async def run_pipeline():
+    auditor = AirGapEgressAuditor()
+    bind_res = auditor.audit_socket_binding("127.0.0.1", 8080)
+    egress_res = auditor.assert_zero_outbound_egress()
+    
+    jetson = EdgeHardwareProfile("Jetson-Orin-16GB", 16.0, 204.8, 50)
+    budgeter = EdgeVRAMBudgeter(jetson)
+    spec = ModelDeploymentSpec(8.0, 4.5, 4096, 32, 32, 128)
+    footprint = budgeter.calculate_footprint(spec)
+    
+    watchdog = EdgeWatchdogOrchestrator(failover_latency_cap_ms=500.0)
+    print(f"Air-Gap Status: {egress_res['status']} | VRAM Headroom: {footprint['headroom_gb']}GB")
+
+asyncio.run(run_pipeline())
+`;
+
 interface CapstoneEvaluationRunnerProps {
   courseId?: string;
   onPassed?: (score: number) => void;
@@ -216,16 +383,27 @@ export function CapstoneEvaluationRunner({
   courseId = 'VAAI-101',
   onPassed,
 }: CapstoneEvaluationRunnerProps) {
+  const isVAAI203 = courseId === 'VAAI-203';
   const isVAAI201 = courseId === 'VAAI-201';
-  const defaultCode = isVAAI201 ? DEFAULT_VAAI_201_CODE : DEFAULT_VAAI_101_CODE;
-  const accreditationCode = isVAAI201 ? 'TWC-ETPL-78752-VAAI-201' : 'TWC-ETPL-78752-VAAI-101';
+  const defaultCode = isVAAI203
+    ? DEFAULT_VAAI_203_CODE
+    : isVAAI201
+    ? DEFAULT_VAAI_201_CODE
+    : DEFAULT_VAAI_101_CODE;
+  const accreditationCode = isVAAI203
+    ? 'TWC-ETPL-78752-VAAI-203'
+    : isVAAI201
+    ? 'TWC-ETPL-78752-VAAI-201'
+    : 'TWC-ETPL-78752-VAAI-101';
 
   const [code, setCode] = useState(defaultCode);
   const [isEvaluating, setIsEvaluating] = useState(false);
   const [evaluationResult, setEvaluationResult] = useState<CapstoneEvaluationResult | null>(null);
   const [terminalOutput, setTerminalOutput] = useState<string[]>([
     `[INIT] ${courseId} Defense Capstone Evaluation Engine Ready.`,
-    isVAAI201
+    isVAAI203
+      ? '[INFO] Ingesting 10 synthetic tactical edge deployment scenarios in client WASM runtime.'
+      : isVAAI201
       ? '[INFO] Ingesting 10 synthetic tactical reconnaissance & strike missions in client WASM runtime.'
       : '[INFO] Ingesting 10 tactical noisy SITREPs in client WASM runtime.',
     '[READY] Click "Execute Capstone Evaluation" to begin.',
@@ -249,7 +427,11 @@ export function CapstoneEvaluationRunner({
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = isVAAI201 ? 'vaai_201_capstone_pipeline.py' : 'vaai_101_capstone_pipeline.py';
+    a.download = isVAAI203
+      ? 'vaai_203_capstone_pipeline.py'
+      : isVAAI201
+      ? 'vaai_201_capstone_pipeline.py'
+      : 'vaai_101_capstone_pipeline.py';
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -269,7 +451,14 @@ export function CapstoneEvaluationRunner({
     setTerminalOutput(['[EXEC] Initializing Pyodide WASM micro-sandbox...']);
 
     // Simulate progressive terminal output streaming
-    const interimSteps = isVAAI201
+    const interimSteps = isVAAI203
+      ? [
+          '[STAGE 1/4] Auditing Zero-Egress Air-Gap Compliance & Socket Isolation (NIST SP 800-171 SC-7)...',
+          '[STAGE 2/4] Testing Quantization & VRAM Dynamic Budgeting under SWaP-C Constraints (MIL-STD-810H)...',
+          '[STAGE 3/4] Benchmarking Local Inference Throughput & Time-to-First-Token SLA...',
+          '[STAGE 4/4] Verifying Asynchronous Watchdog Failover & Sub-500ms Downshifting (CJCSM 6510.01B)...',
+        ]
+      : isVAAI201
       ? [
           '[STAGE 1/4] Validating Finite-State Determinism & Acyclic Loop Tripwires (JP 3-0)...',
           '[STAGE 2/4] Testing Sandboxed Tool Dispatcher & Role-Based ACLs (NIST SP 800-218)...',
@@ -289,7 +478,9 @@ export function CapstoneEvaluationRunner({
     }
 
     try {
-      const result = isVAAI201
+      const result = isVAAI203
+        ? await evaluateVAAI203CapstoneSubmission(code)
+        : isVAAI201
         ? await evaluateVAAI201CapstoneSubmission(code)
         : await evaluateCapstoneSubmission(code);
 
@@ -338,12 +529,16 @@ export function CapstoneEvaluationRunner({
               <span className="text-slate-400 text-xs">ACCREDITATION: {accreditationCode}</span>
             </div>
             <h2 className="text-xl md:text-2xl font-bold text-slate-100 uppercase tracking-tight">
-              {isVAAI201
+              {isVAAI203
+                ? 'Air-Gapped Tactical Deployable Inference Engine'
+                : isVAAI201
                 ? 'Autonomous Multi-Agent Reconnaissance & Strike Planning Pipeline'
                 : 'Automated Multi-Stage Defense Briefing Generator'}
             </h2>
             <p className="text-xs text-slate-400 mt-1 max-w-2xl font-sans">
-              {isVAAI201
+              {isVAAI203
+                ? 'Deploy a fully air-gapped, zero-egress Python inference pipeline benchmarking 10 tactical edge scenarios in client-side Pyodide WASM. Graded automatically across 4 defense dimensions with an \u2265 80% passing floor.'
+                : isVAAI201
                 ? 'Deploy an autonomous multi-agent pipeline traversing 10 synthetic tactical missions in client-side Pyodide WASM. Graded automatically across 4 defense dimensions with an \u2265 80% passing floor.'
                 : 'Deploy an end-to-end Python pipeline processing 10 unstandardized tactical SITREPs in client-side Pyodide WASM. Graded automatically across 4 defense dimensions with an \u2265 80% passing floor.'}
             </p>
@@ -384,34 +579,34 @@ export function CapstoneEvaluationRunner({
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-4 pt-4 border-t border-slate-900 text-xs">
           <div className="bg-slate-900/60 p-2.5 rounded border border-slate-800">
             <span className="text-slate-400 block text-[11px]">
-              {isVAAI201 ? '1. Finite-State Determinism' : '1. Schema Conformity'}
+              {isVAAI203 ? '1. Zero-Egress Air-Gap' : isVAAI201 ? '1. Finite-State Determinism' : '1. Schema Conformity'}
             </span>
             <span className="font-bold text-slate-200">
-              {isVAAI201 ? 'Weight: 30% (Acyclic FSM)' : 'Weight: 30%'}
+              {isVAAI203 ? 'Weight: 30% (SC-7)' : isVAAI201 ? 'Weight: 30% (Acyclic FSM)' : 'Weight: 30%'}
             </span>
           </div>
           <div className="bg-slate-900/60 p-2.5 rounded border border-slate-800">
             <span className="text-slate-400 block text-[11px]">
-              {isVAAI201 ? '2. Tool Guardrails' : '2. Fallback Resilience'}
+              {isVAAI203 ? '2. SWaP-C & VRAM' : isVAAI201 ? '2. Tool Guardrails' : '2. Fallback Resilience'}
             </span>
             <span className="font-bold text-slate-200">
-              {isVAAI201 ? 'Weight: 25% (NIST SSDF)' : 'Weight: 25% (\u2264 250ms)'}
+              {isVAAI203 ? 'Weight: 25% (\u2265 5% Headroom)' : isVAAI201 ? 'Weight: 25% (NIST SSDF)' : 'Weight: 25% (\u2264 250ms)'}
             </span>
           </div>
           <div className="bg-slate-900/60 p-2.5 rounded border border-slate-800">
             <span className="text-slate-400 block text-[11px]">
-              {isVAAI201 ? '3. HITL Oversight' : '3. Boundary Defense'}
+              {isVAAI203 ? '3. Local Throughput' : isVAAI201 ? '3. HITL Oversight' : '3. Boundary Defense'}
             </span>
             <span className="font-bold text-slate-200">
-              {isVAAI201 ? 'Weight: 25% (DoDD 3000.09)' : 'Weight: 25% (100% PII)'}
+              {isVAAI203 ? 'Weight: 25% (\u2265 12 tok/s)' : isVAAI201 ? 'Weight: 25% (DoDD 3000.09)' : 'Weight: 25% (100% PII)'}
             </span>
           </div>
           <div className="bg-slate-900/60 p-2.5 rounded border border-slate-800">
             <span className="text-slate-400 block text-[11px]">
-              {isVAAI201 ? '4. Execution Efficiency' : '4. Code Quality & Tokens'}
+              {isVAAI203 ? '4. Watchdog Failover' : isVAAI201 ? '4. Execution Efficiency' : '4. Code Quality & Tokens'}
             </span>
             <span className="font-bold text-slate-200">
-              {isVAAI201 ? 'Weight: 20% (FM 3-0)' : 'Weight: 20% (\u2264 4,096)'}
+              {isVAAI203 ? 'Weight: 20% (\u2264 500ms)' : isVAAI201 ? 'Weight: 20% (FM 3-0)' : 'Weight: 20% (\u2264 4,096)'}
             </span>
           </div>
         </div>
@@ -452,7 +647,9 @@ export function CapstoneEvaluationRunner({
               <>
                 <Play className="w-4 h-4" />
                 <span>
-                  {isVAAI201
+                  {isVAAI203
+                    ? 'Execute Air-Gap Capstone Evaluation (10 Scenarios)'
+                    : isVAAI201
                     ? 'Execute Multi-Agent Capstone Evaluation (10 Missions)'
                     : 'Execute 4-Stage Capstone Evaluation (10 SITREPs)'}
                 </span>
@@ -520,7 +717,7 @@ export function CapstoneEvaluationRunner({
                 <div className="space-y-1.5 pt-2 border-t border-slate-900 text-[11px]">
                   <div className="flex justify-between">
                     <span className="text-slate-400">
-                      {isVAAI201 ? '1. Finite-State Determinism:' : '1. Schema Conformity:'}
+                      {isVAAI203 ? '1. Zero-Egress Air-Gap:' : isVAAI201 ? '1. Finite-State Determinism:' : '1. Schema Conformity:'}
                     </span>
                     <span className="text-slate-200">
                       {evaluationResult.breakdown.schemaConformity.score} / 30 pts
@@ -528,7 +725,7 @@ export function CapstoneEvaluationRunner({
                   </div>
                   <div className="flex justify-between">
                     <span className="text-slate-400">
-                      {isVAAI201 ? '2. Tool Guardrails:' : '2. Fallback Resilience:'}
+                      {isVAAI203 ? '2. SWaP-C VRAM & GGUF:' : isVAAI201 ? '2. Tool Guardrails:' : '2. Fallback Resilience:'}
                     </span>
                     <span className="text-slate-200">
                       {evaluationResult.breakdown.fallbackResilience.score} / 25 pts
@@ -536,7 +733,7 @@ export function CapstoneEvaluationRunner({
                   </div>
                   <div className="flex justify-between">
                     <span className="text-slate-400">
-                      {isVAAI201 ? '3. HITL Oversight:' : '3. Boundary Defense:'}
+                      {isVAAI203 ? '3. Local Throughput SLA:' : isVAAI201 ? '3. HITL Oversight:' : '3. Boundary Defense:'}
                     </span>
                     <span className="text-slate-200">
                       {evaluationResult.breakdown.boundarySanitization.score} / 25 pts
@@ -544,7 +741,7 @@ export function CapstoneEvaluationRunner({
                   </div>
                   <div className="flex justify-between">
                     <span className="text-slate-400">
-                      {isVAAI201 ? '4. Execution Efficiency:' : '4. Code Quality & Budget:'}
+                      {isVAAI203 ? '4. Watchdog Failover:' : isVAAI201 ? '4. Execution Efficiency:' : '4. Code Quality & Budget:'}
                     </span>
                     <span className="text-slate-200">
                       {evaluationResult.breakdown.codeQuality.score} / 20 pts

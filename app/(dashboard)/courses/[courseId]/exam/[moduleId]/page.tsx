@@ -6,6 +6,7 @@ import { ChevronLeft, Terminal, Shield, Award } from 'lucide-react';
 import { getCourseById } from '@/lib/courses-data';
 import { getModuleExam } from '@/lib/vaai-101-assessment-data';
 import { getVAAI201ModuleExam } from '@/lib/vaai-201-assessment-data';
+import { getVAAI203ModuleExam } from '@/lib/vaai-203-assessment-data';
 import { ModuleExamCard } from '@/components/lms/module-exam-card';
 import { CapstoneEvaluationRunner } from '@/components/lms/capstone-evaluation-runner';
 
@@ -14,10 +15,19 @@ interface ExamPageProps {
 }
 
 function resolveExam(courseId: string, moduleId: string) {
+  if (courseId === 'VAAI-203') {
+    return getVAAI203ModuleExam(moduleId);
+  }
   if (courseId === 'VAAI-201') {
     return getVAAI201ModuleExam(moduleId);
   }
   return getModuleExam(moduleId);
+}
+
+function resolveAccreditationCode(courseId: string) {
+  if (courseId === 'VAAI-203') return 'TWC-ETPL-78752-VAAI-203';
+  if (courseId === 'VAAI-201') return 'TWC-ETPL-78752-VAAI-201';
+  return 'TWC-ETPL-78752-VAAI-101';
 }
 
 export async function generateMetadata({ params }: ExamPageProps): Promise<Metadata> {
@@ -25,7 +35,7 @@ export async function generateMetadata({ params }: ExamPageProps): Promise<Metad
   const course = getCourseById(courseId);
   const isCapstone = moduleId.toLowerCase() === 'capstone';
   const exam = resolveExam(courseId, moduleId);
-  const accreditationCode = courseId === 'VAAI-201' ? 'TWC-ETPL-78752-VAAI-201' : 'TWC-ETPL-78752-VAAI-101';
+  const accreditationCode = resolveAccreditationCode(courseId);
 
   if (isCapstone) {
     return {
@@ -49,7 +59,7 @@ export default async function ExamPage({ params }: ExamPageProps) {
   const course = getCourseById(courseId);
   const isCapstone = moduleId.toLowerCase() === 'capstone';
   const exam = resolveExam(courseId, moduleId);
-  const accreditationCode = courseId === 'VAAI-201' ? 'TWC-ETPL-78752-VAAI-201' : 'TWC-ETPL-78752-VAAI-101';
+  const accreditationCode = resolveAccreditationCode(courseId);
 
   if (!isCapstone && !exam) {
     notFound();

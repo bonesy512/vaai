@@ -245,13 +245,117 @@ export const VAAI_201_PROGRESSION_MODULES: ProgressionModuleNode[] = [
   },
 ];
 
+export const VAAI_203_PROGRESSION_MODULES: ProgressionModuleNode[] = [
+  {
+    id: 'mod-1',
+    moduleNumber: 1,
+    title: 'Module 1: Tactical SWaP-C Profiling & VRAM Mathematical Budgeting (MIL-STD-810H)',
+    contactHours: 10,
+    lessons: [
+      {
+        id: 'L1',
+        title: 'Edge Accelerator Memory Architecture & Dynamic KV-Cache Sizing',
+        durationMinutes: 600,
+        href: '/courses/VAAI-203/M1/L1',
+      },
+    ],
+    lab: {
+      title: 'Lab 1: Tactical Edge VRAM Budgeter',
+      href: '/courses/VAAI-203/M1/L1',
+    },
+    exam: {
+      title: 'Module 1 Doctrinal Examination (MIL-STD-810H)',
+      moduleId: 'mod-1',
+      href: '/courses/VAAI-203/exam/mod-1',
+      passingScorePercentage: 80,
+    },
+  },
+  {
+    id: 'mod-2',
+    moduleNumber: 2,
+    title: 'Module 2: GGUF Header Structure & Cryptographic Enclave Verification (NIST SP 800-171 SC-13)',
+    contactHours: 10,
+    lessons: [
+      {
+        id: 'L1',
+        title: 'Binary Container Inspection & SHA-256 Supply-Chain Attestation',
+        durationMinutes: 600,
+        href: '/courses/VAAI-203/M2/L1',
+      },
+    ],
+    lab: {
+      title: 'Lab 2: GGUF Header & Cryptographic Verifier',
+      href: '/courses/VAAI-203/M2/L1',
+    },
+    exam: {
+      title: 'Module 2 Doctrinal Examination (NIST SP 800-171 SC-13)',
+      moduleId: 'mod-2',
+      href: '/courses/VAAI-203/exam/mod-2',
+      passingScorePercentage: 80,
+    },
+  },
+  {
+    id: 'mod-3',
+    moduleNumber: 3,
+    title: 'Module 3: Zero-Egress Network Isolation & Air-Gapped Gateway Auditing (NIST SP 800-171 SC-7)',
+    contactHours: 10,
+    lessons: [
+      {
+        id: 'L1',
+        title: 'Fail-Closed Socket Binding & Container Network Namespace Isolation',
+        durationMinutes: 600,
+        href: '/courses/VAAI-203/M3/L1',
+      },
+    ],
+    lab: {
+      title: 'Lab 3: Air-Gapped Egress & Socket Auditor',
+      href: '/courses/VAAI-203/M3/L1',
+    },
+    exam: {
+      title: 'Module 3 Doctrinal Examination (NIST SP 800-171 SC-7 / CNSSI 1253)',
+      moduleId: 'mod-3',
+      href: '/courses/VAAI-203/exam/mod-3',
+      passingScorePercentage: 80,
+    },
+  },
+  {
+    id: 'mod-4',
+    moduleNumber: 4,
+    title: 'Module 4: Tiered Local Model Failover & Asynchronous Watchdog (CJCSM 6510.01B)',
+    contactHours: 10,
+    lessons: [
+      {
+        id: 'L1',
+        title: 'Expeditionary Health Watchdogs & Sub-500ms Model Downshifting',
+        durationMinutes: 600,
+        href: '/courses/VAAI-203/M4/L1',
+      },
+    ],
+    lab: {
+      title: 'Lab 4: Tiered Edge Failover Watchdog',
+      href: '/courses/VAAI-203/M4/L1',
+    },
+    exam: {
+      title: 'Module 4 Doctrinal Examination (CJCSM 6510.01B)',
+      moduleId: 'mod-4',
+      href: '/courses/VAAI-203/exam/mod-4',
+      passingScorePercentage: 80,
+    },
+  },
+];
+
 export function CourseProgressionTree({
   courseId = 'VAAI-101',
   completedExams = [],
 }: CourseProgressionTreeProps) {
   const [completed, setCompleted] = useState<Set<string>>(new Set(completedExams));
-  const modules = courseId === 'VAAI-201' ? VAAI_201_PROGRESSION_MODULES : VAAI_101_PROGRESSION_MODULES;
+  const isVAAI203 = courseId === 'VAAI-203';
   const isVAAI201 = courseId === 'VAAI-201';
+  const modules = isVAAI203
+    ? VAAI_203_PROGRESSION_MODULES
+    : isVAAI201
+    ? VAAI_201_PROGRESSION_MODULES
+    : VAAI_101_PROGRESSION_MODULES;
 
   const isModuleUnlocked = (moduleIndex: number): boolean => {
     if (moduleIndex === 0) return true;
@@ -441,7 +545,9 @@ export function CourseProgressionTree({
                   Capstone Defense & Automated WASM Evaluation Harness
                 </CardTitle>
                 <span className="text-[11px] text-slate-500 font-mono">
-                  {isVAAI201
+                  {isVAAI203
+                    ? 'Air-Gapped Tactical Inference Engine | 10 Scenarios'
+                    : isVAAI201
                     ? 'Multi-Agent Recon-and-Strike Pipeline | 10 Missions'
                     : 'Multi-Stage Defense Briefing Pipeline | 10 Noisy SITREPs'}
                 </span>
